@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  cvs       CV[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CV {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String       @default("Untitled CV")
+  template     String       @default("modern")
+  // Flexible JSON for contact block + meta fields
+  personalInfo Json?
+  summary      String?      @db.Text
+  experiences  Experience[]
+  educations   Education[]
+  skills       Skill[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model Experience {
+  id          String    @id @default(cuid())
+  cvId        String
+  cv          CV        @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  company     String
+  position    String
+  location    String?
+  startDate   String?
+  endDate     String?
+  description String?   @db.Text
+  order       Int       @default(0)
+
+  @@index([cvId])
+}
+
+model Education {
+  id          String   @id @default(cuid())
+  cvId        String
+  cv          CV       @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  institution String
+  degree      String
+  field       String?
+  startDate   String?
+  endDate     String?
+  order       Int      @default(0)
+
+  @@index([cvId])
+}
+
+model Skill {
+  id     String @id @default(cuid())
+  cvId   String
+  cv     CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name   String
+  level  String @default("Intermediate")
+  order  Int    @default(0)
+
+  @@index([cvId])
+}

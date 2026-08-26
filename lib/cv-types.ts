@@ -1,5 +1,7 @@
 export type TemplateId = "classic" | "modern" | "minimal";
 
+export const TEMPLATE_IDS: TemplateId[] = ["classic", "modern", "minimal"];
+
 export interface PersonalInfo {
   fullName: string;
   title: string;
@@ -17,6 +19,7 @@ export interface ExperienceItem {
   location: string;
   startDate: string;
   endDate: string;
+  current: boolean;
   description: string;
 }
 
@@ -27,6 +30,7 @@ export interface EducationItem {
   field: string;
   startDate: string;
   endDate: string;
+  description: string;
 }
 
 export type SkillLevel = "Beginner" | "Intermediate" | "Advanced" | "Expert";
@@ -37,6 +41,36 @@ export interface SkillItem {
   level: SkillLevel;
 }
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  description: string;
+  technologies: string[];
+  url: string;
+}
+
+export interface CertificationItem {
+  id: string;
+  name: string;
+  issuer: string;
+  date: string;
+  url: string;
+}
+
+export type LanguageLevel =
+  | "Basic"
+  | "Conversational"
+  | "Professional"
+  | "Fluent"
+  | "Native";
+
+export interface LanguageItem {
+  id: string;
+  name: string;
+  level: LanguageLevel;
+}
+
+/** The template-independent CV content model. */
 export interface CVData {
   template: TemplateId;
   personal: PersonalInfo;
@@ -44,6 +78,9 @@ export interface CVData {
   experiences: ExperienceItem[];
   educations: EducationItem[];
   skills: SkillItem[];
+  projects: ProjectItem[];
+  certifications: CertificationItem[];
+  languages: LanguageItem[];
 }
 
 export const SKILL_LEVELS: SkillLevel[] = [
@@ -51,6 +88,14 @@ export const SKILL_LEVELS: SkillLevel[] = [
   "Intermediate",
   "Advanced",
   "Expert",
+];
+
+export const LANGUAGE_LEVELS: LanguageLevel[] = [
+  "Basic",
+  "Conversational",
+  "Professional",
+  "Fluent",
+  "Native",
 ];
 
 export const emptyPersonal: PersonalInfo = {
@@ -63,7 +108,7 @@ export const emptyPersonal: PersonalInfo = {
   portfolio: "",
 };
 
-/** Realistic starter content — never lorem ipsum. */
+/** Realistic starter content — used for marketing previews only, never lorem ipsum. */
 export const sampleCV: CVData = {
   template: "modern",
   personal: {
@@ -85,6 +130,7 @@ export const sampleCV: CVData = {
       location: "Douala, Cameroon",
       startDate: "Jan 2023",
       endDate: "Present",
+      current: true,
       description:
         "Built and maintained customer-facing features using React and Node.js. Collaborated with designers to ship a redesigned dashboard that improved task completion. Reviewed code and mentored two junior developers.",
     },
@@ -95,6 +141,7 @@ export const sampleCV: CVData = {
       location: "Yaoundé, Cameroon",
       startDate: "Jun 2022",
       endDate: "Dec 2022",
+      current: false,
       description:
         "Implemented reusable UI components and improved page performance across the marketing site. Worked closely with the product team to translate designs into accessible, responsive interfaces.",
     },
@@ -107,6 +154,7 @@ export const sampleCV: CVData = {
       field: "Computer Engineering",
       startDate: "2019",
       endDate: "2022",
+      description: "",
     },
   ],
   skills: [
@@ -117,10 +165,25 @@ export const sampleCV: CVData = {
     { id: "sk-5", name: "TypeScript", level: "Intermediate" },
     { id: "sk-6", name: "Git", level: "Advanced" },
   ],
+  projects: [
+    {
+      id: "pr-1",
+      name: "TaskFlow",
+      description:
+        "A collaborative task manager with real-time updates and a clean, keyboard-friendly interface.",
+      technologies: ["React", "Node.js", "PostgreSQL"],
+      url: "github.com/alexmbarga/taskflow",
+    },
+  ],
+  certifications: [],
+  languages: [
+    { id: "lang-1", name: "French", level: "Native" },
+    { id: "lang-2", name: "English", level: "Professional" },
+  ],
 };
 
-/** A clean starting point for a brand-new CV in the builder. */
-export function createBlankCV(template: TemplateId = "modern"): CVData {
+/** A clean starting point for a brand-new CV. */
+export function createBlankCV(template: TemplateId = "classic"): CVData {
   return {
     template,
     personal: { ...emptyPersonal },
@@ -128,5 +191,8 @@ export function createBlankCV(template: TemplateId = "modern"): CVData {
     experiences: [],
     educations: [],
     skills: [],
+    projects: [],
+    certifications: [],
+    languages: [],
   };
 }

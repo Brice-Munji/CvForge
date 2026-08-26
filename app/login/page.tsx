@@ -1,38 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
 import { Input, FieldGroup } from "@/components/ui/Field";
-import { setUser } from "@/lib/auth";
+import { signInWithPassword } from "@/lib/auth/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
+  const redirect = params.get("redirect") || "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+    setError(null);
     setLoading(true);
-    const name = email.split("@")[0]?.replace(/[._-]/g, " ") || "there";
-    setUser({ name: name.replace(/\b\w/g, (c) => c.toUpperCase()), email });
-    router.push("/dashboard");
+    const { error } = await signInWithPassword(email.trim(), password);
+    if (error) {
+      setError(error);
+      setLoading(false);
+      return;
+    }
+    router.push(redirect);
+    router.refresh();
   };
 
   return (
-    <AuthShell eyebrow="Welcome back">
+    <>
       <h1 className="mt-3 font-display text-3xl font-extrabold tracking-tight text-ink">
         Log in to CVForge
       </h1>
-      <p className="mt-2 text-ink-muted">
-        Pick up right where you left off.
-      </p>
+      <p className="mt-2 text-ink-muted">Pick up right where you left off.</p>
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
+      {error && (
+        <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FieldGroup label="Email" htmlFor="email">
           <Input
             id="email"
@@ -70,7 +86,7 @@ export default function LoginPage() {
         <div className="h-px flex-1 bg-line" />
       </div>
 
-      <GoogleButton label="Continue with Google" />
+      <GoogleButton label="Continue with Google" onError={setError} />
 
       <p className="mt-8 text-center text-sm text-ink-muted">
         Don&apos;t have an account?{" "}
@@ -81,6 +97,16 @@ export default function LoginPage() {
           Create My CV
         </Link>
       </p>
+    </>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <AuthShell eyebrow="Welcome back">
+      <Suspense fallback={<div className="mt-8 h-40" />}>
+        <LoginForm />
+      </Suspense>
     </AuthShell>
   );
 }

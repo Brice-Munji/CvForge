@@ -7,69 +7,117 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  cvs       CV[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/// A user profile. `id` mirrors the Supabase auth user id (uuid) in production,
+/// or a generated id when using the built-in local auth provider.
+model Profile {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  avatarUrl    String?
+  /// Only set when using the built-in local auth provider (scrypt hash).
+  /// Never set when authentication is delegated to Supabase.
+  passwordHash String?
+  cvs          CV[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model CV {
-  id           String       @id @default(cuid())
-  userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title        String       @default("Untitled CV")
-  template     String       @default("modern")
-  // Flexible JSON for contact block + meta fields
-  personalInfo Json?
-  summary      String?      @db.Text
-  experiences  Experience[]
-  educations   Education[]
-  skills       Skill[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id             String          @id @default(cuid())
+  userId         String
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String          @default("My CV")
+  template       String          @default("classic")
+  /// Contact block: fullName, title, email, phone, location, linkedin, portfolio
+  personalInfo   Json?
+  summary        String?
+  experiences    Experience[]
+  educations     Education[]
+  skills         Skill[]
+  projects       Project[]
+  certifications Certification[]
+  languages      Language[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([userId])
 }
 
 model Experience {
-  id          String    @id @default(cuid())
+  id          String  @id @default(cuid())
   cvId        String
-  cv          CV        @relation(fields: [cvId], references: [id], onDelete: Cascade)
-  company     String
-  position    String
-  location    String?
-  startDate   String?
-  endDate     String?
-  description String?   @db.Text
-  order       Int       @default(0)
+  cv          CV      @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  company     String  @default("")
+  position    String  @default("")
+  location    String  @default("")
+  startDate   String  @default("")
+  endDate     String  @default("")
+  current     Boolean @default(false)
+  description String  @default("")
+  order       Int     @default(0)
 
   @@index([cvId])
 }
 
 model Education {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   cvId        String
-  cv          CV       @relation(fields: [cvId], references: [id], onDelete: Cascade)
-  institution String
-  degree      String
-  field       String?
-  startDate   String?
-  endDate     String?
-  order       Int      @default(0)
+  cv          CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  institution String @default("")
+  degree      String @default("")
+  field       String @default("")
+  startDate   String @default("")
+  endDate     String @default("")
+  description String @default("")
+  order       Int    @default(0)
 
   @@index([cvId])
 }
 
 model Skill {
+  id    String @id @default(cuid())
+  cvId  String
+  cv    CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name  String @default("")
+  level String @default("Intermediate")
+  order Int    @default(0)
+
+  @@index([cvId])
+}
+
+model Project {
+  id           String   @id @default(cuid())
+  cvId         String
+  cv           CV       @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name         String   @default("")
+  description  String   @default("")
+  technologies String[] @default([])
+  url          String   @default("")
+  order        Int      @default(0)
+
+  @@index([cvId])
+}
+
+model Certification {
   id     String @id @default(cuid())
   cvId   String
   cv     CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
-  name   String
-  level  String @default("Intermediate")
+  name   String @default("")
+  issuer String @default("")
+  date   String @default("")
+  url    String @default("")
   order  Int    @default(0)
+
+  @@index([cvId])
+}
+
+model Language {
+  id    String @id @default(cuid())
+  cvId  String
+  cv    CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name  String @default("")
+  level String @default("Conversational")
+  order Int    @default(0)
 
   @@index([cvId])
 }

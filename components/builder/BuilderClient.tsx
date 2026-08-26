@@ -1,37 +1,43 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
   ChevronLeft,
   ChevronRight,
   Eye,
+  Pencil,
   X,
-  Save,
+  Copy,
+  Trash2,
+  MoreHorizontal,
+  Loader2,
 } from "lucide-react";
-import { AppHeader } from "@/components/app/AppHeader";
+import { AppHeader, type HeaderUser } from "@/components/app/AppHeader";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { A4Frame } from "@/components/cv/A4Frame";
 import { CVDocument } from "@/components/cv/CVDocument";
-import {
-  createBlankCV,
-  type CVData,
-  type TemplateId,
-  type PersonalInfo,
-  type ExperienceItem,
-  type EducationItem,
-  type SkillItem,
-} from "@/lib/cv-types";
-import { cn } from "@/lib/utils";
+import { SaveIndicator, type SaveStatus } from "./SaveIndicator";
 import {
   PersonalSection,
   SummarySection,
   ExperienceSection,
   EducationSection,
   SkillsSection,
-  UpcomingSection,
+  ProjectsSection,
+  CertificationsSection,
+  LanguagesSection,
 } from "./SectionForms";
+import {
+  type CVData,
+  type TemplateId,
+  type PersonalInfo,
+} from "@/lib/cv-types";
+import { isValidEmail } from "@/lib/validation";
+import { cn } from "@/lib/utils";
 
 type StepKey =
   | "personal"
@@ -41,19 +47,17 @@ type StepKey =
   | "skills"
   | "projects"
   | "certifications"
-  | "languages"
-  | "references";
+  | "languages";
 
-const STEPS: { key: StepKey; label: string; enabled: boolean }[] = [
-  { key: "personal", label: "Personal Information", enabled: true },
-  { key: "summary", label: "Professional Summary", enabled: true },
-  { key: "experience", label: "Experience", enabled: true },
-  { key: "education", label: "Education", enabled: true },
-  { key: "skills", label: "Skills", enabled: true },
-  { key: "projects", label: "Projects", enabled: false },
-  { key: "certifications", label: "Certifications", enabled: false },
-  { key: "languages", label: "Languages", enabled: false },
-  { key: "references", label: "References", enabled: false },
+const STEPS: { key: StepKey; label: string }[] = [
+  { key: "personal", label: "Personal" },
+  { key: "summary", label: "Summary" },
+  { key: "experience", label: "Experience" },
+  { key: "education", label: "Education" },
+  { key: "skills", label: "Skills" },
+  { key: "projects", label: "Projects" },
+  { key: "certifications", label: "Certifications" },
+  { key: "languages", label: "Languages" },
 ];
 
 const TEMPLATES: { id: TemplateId; label: string }[] = [
@@ -62,26 +66,115 @@ const TEMPLATES: { id: TemplateId; label: string }[] = [
   { id: "minimal", label: "Minimal" },
 ];
 
+const AUTOSAVE_DELAY = 900;
+
 export function BuilderClient({
-  initialTemplate = "modern",
+  user,
+  cvId,
+  initialTitle,
+  initialData,
 }: {
-  initialTemplate?: TemplateId;
+  user: HeaderUser;
+  cvId: string;
+  initialTitle: string;
+  initialData: CVData;
 }) {
-  const [cv, setCv] = useState<CVData>(() => createBlankCV(initialTemplate));
-  const [title, setTitle] = useState("Untitled CV");
+  const router = useRouter();
+  const [cv, setCv] = useState<CVData>(initialData);
+  const [title, setTitle] = useState(initialTitle);
   const [active, setActive] = useState(0);
-  const [mobilePreview, setMobilePreview] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [view, setView] = useState<"edit" | "preview">("edit");
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
   const idc = useRef(0);
   const newId = (p: string) => `${p}-${(idc.current += 1)}`;
-
   const step = STEPS[active];
 
-  /* ---------- updaters ---------- */
+  /* ------------- autosave ------------- */
+  const latest = useRef({ cv, title });
+  latest.current = { cv, title };
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const dirty = useRef(false);
+  const skipFirst = useRef(true);
+
+  const save = useCallback(async () => {
+    const { cv: c, title: t } = latest.current;
+    setStatus("saving");
+    try {
+      const res = await fetch(`/api/cv/${cvId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: t, ...c }),
+      });
+      if (!res.ok) throw new Error();
+      dirty.current = false;
+      setStatus("saved");
+    } catch {
+      setStatus("error");
+    }
+  }, [cvId]);
+
+  // Debounced autosave whenever content changes.
+  useEffect(() => {
+    if (skipFirst.current) {
+      skipFirst.current = false;
+      return;
+    }
+    dirty.current = true;
+    setStatus("unsaved");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(save, AUTOSAVE_DELAY);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [cv, title, save]);
+
+  // Warn before leaving with unsaved work.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty.current || status === "saving") {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [status]);
+
+  /* ------------- validation ------------- */
+  const errors = useMemo(() => {
+    const er: Partial<Record<keyof PersonalInfo, string>> = {};
+    if (!cv.personal.fullName.trim()) er.fullName = "Full name is required.";
+    if (!cv.personal.email.trim()) er.email = "Email is required.";
+    else if (!isValidEmail(cv.personal.email))
+      er.email = "Enter a valid email address.";
+    return er;
+  }, [cv.personal.fullName, cv.personal.email]);
+
+  /* ------------- completion ------------- */
+  const complete = useMemo<Record<StepKey, boolean>>(
+    () => ({
+      personal: Boolean(cv.personal.fullName.trim() && cv.personal.email.trim()),
+      summary: cv.summary.trim().length > 0,
+      experience: cv.experiences.length > 0,
+      education: cv.educations.length > 0,
+      skills: cv.skills.length > 0,
+      projects: cv.projects.length > 0,
+      certifications: cv.certifications.length > 0,
+      languages: cv.languages.length > 0,
+    }),
+    [cv]
+  );
+
+  /* ------------- updaters ------------- */
   const setPersonal = (key: keyof PersonalInfo, value: string) =>
     setCv((d) => ({ ...d, personal: { ...d.personal, [key]: value } }));
-
   const setSummary = (value: string) => setCv((d) => ({ ...d, summary: value }));
+  const setTemplate = (t: TemplateId) => setCv((d) => ({ ...d, template: t }));
 
   const addExperience = () =>
     setCv((d) => ({
@@ -95,26 +188,18 @@ export function BuilderClient({
           location: "",
           startDate: "",
           endDate: "",
+          current: false,
           description: "",
         },
       ],
     }));
-  const updateExperience = (
-    id: string,
-    key: keyof ExperienceItem,
-    value: string
-  ) =>
+  const updateExperience = (id: string, patch: Partial<CVData["experiences"][number]>) =>
     setCv((d) => ({
       ...d,
-      experiences: d.experiences.map((e) =>
-        e.id === id ? { ...e, [key]: value } : e
-      ),
+      experiences: d.experiences.map((e) => (e.id === id ? { ...e, ...patch } : e)),
     }));
   const removeExperience = (id: string) =>
-    setCv((d) => ({
-      ...d,
-      experiences: d.experiences.filter((e) => e.id !== id),
-    }));
+    setCv((d) => ({ ...d, experiences: d.experiences.filter((e) => e.id !== id) }));
 
   const addEducation = () =>
     setCv((d) => ({
@@ -128,69 +213,115 @@ export function BuilderClient({
           field: "",
           startDate: "",
           endDate: "",
+          description: "",
         },
       ],
     }));
-  const updateEducation = (
-    id: string,
-    key: keyof EducationItem,
-    value: string
-  ) =>
+  const updateEducation = (id: string, patch: Partial<CVData["educations"][number]>) =>
     setCv((d) => ({
       ...d,
-      educations: d.educations.map((e) =>
-        e.id === id ? { ...e, [key]: value } : e
-      ),
+      educations: d.educations.map((e) => (e.id === id ? { ...e, ...patch } : e)),
     }));
   const removeEducation = (id: string) =>
-    setCv((d) => ({
-      ...d,
-      educations: d.educations.filter((e) => e.id !== id),
-    }));
+    setCv((d) => ({ ...d, educations: d.educations.filter((e) => e.id !== id) }));
 
   const addSkill = () =>
     setCv((d) => ({
       ...d,
-      skills: [
-        ...d.skills,
-        { id: newId("sk"), name: "", level: "Intermediate" },
-      ],
+      skills: [...d.skills, { id: newId("sk"), name: "", level: "Intermediate" }],
     }));
-  const updateSkill = (id: string, key: keyof SkillItem, value: string) =>
+  const updateSkill = (id: string, patch: Partial<CVData["skills"][number]>) =>
     setCv((d) => ({
       ...d,
-      skills: d.skills.map((s) =>
-        s.id === id ? { ...s, [key]: value } : s
-      ) as SkillItem[],
+      skills: d.skills.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     }));
   const removeSkill = (id: string) =>
     setCv((d) => ({ ...d, skills: d.skills.filter((s) => s.id !== id) }));
 
-  /* ---------- completion state ---------- */
-  const complete = useMemo(() => {
-    return {
-      personal: Boolean(cv.personal.fullName.trim() && cv.personal.title.trim()),
-      summary: cv.summary.trim().length > 0,
-      experience: cv.experiences.length > 0,
-      education: cv.educations.length > 0,
-      skills: cv.skills.length > 0,
-    } as Record<string, boolean>;
-  }, [cv]);
+  const addProject = () =>
+    setCv((d) => ({
+      ...d,
+      projects: [
+        ...d.projects,
+        { id: newId("pr"), name: "", description: "", technologies: [], url: "" },
+      ],
+    }));
+  const updateProject = (id: string, patch: Partial<CVData["projects"][number]>) =>
+    setCv((d) => ({
+      ...d,
+      projects: d.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+  const removeProject = (id: string) =>
+    setCv((d) => ({ ...d, projects: d.projects.filter((p) => p.id !== id) }));
 
-  const setTemplate = (id: TemplateId) =>
-    setCv((d) => ({ ...d, template: id }));
+  const addCertification = () =>
+    setCv((d) => ({
+      ...d,
+      certifications: [
+        ...d.certifications,
+        { id: newId("cert"), name: "", issuer: "", date: "", url: "" },
+      ],
+    }));
+  const updateCertification = (
+    id: string,
+    patch: Partial<CVData["certifications"][number]>
+  ) =>
+    setCv((d) => ({
+      ...d,
+      certifications: d.certifications.map((c) =>
+        c.id === id ? { ...c, ...patch } : c
+      ),
+    }));
+  const removeCertification = (id: string) =>
+    setCv((d) => ({
+      ...d,
+      certifications: d.certifications.filter((c) => c.id !== id),
+    }));
 
-  const save = () => {
+  const addLanguage = () =>
+    setCv((d) => ({
+      ...d,
+      languages: [
+        ...d.languages,
+        { id: newId("lang"), name: "", level: "Conversational" },
+      ],
+    }));
+  const updateLanguage = (id: string, patch: Partial<CVData["languages"][number]>) =>
+    setCv((d) => ({
+      ...d,
+      languages: d.languages.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+    }));
+  const removeLanguage = (id: string) =>
+    setCv((d) => ({ ...d, languages: d.languages.filter((l) => l.id !== id) }));
+
+  /* ------------- CV-level actions ------------- */
+  const handleDuplicate = async () => {
+    if (duplicating) return;
+    setDuplicating(true);
     try {
-      window.localStorage.setItem(
-        "cvforge:draft",
-        JSON.stringify({ title, cv })
-      );
+      const res = await fetch(`/api/cv/${cvId}/duplicate`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const { cv: copy } = await res.json();
+      dirty.current = false;
+      router.push(`/builder/${copy.id}`);
     } catch {
-      /* ignore */
+      setDuplicating(false);
+      setMenuOpen(false);
     }
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1800);
+  };
+
+  const handleDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/cv/${cvId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      dirty.current = false;
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setDeleting(false);
+    }
   };
 
   const goNext = () => setActive((i) => Math.min(i + 1, STEPS.length - 1));
@@ -198,19 +329,31 @@ export function BuilderClient({
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
-      <AppHeader backHref="/dashboard" />
+      <AppHeader
+        user={user}
+        backHref="/dashboard"
+        center={
+          <div className="hidden items-center justify-center md:flex">
+            <SaveIndicator status={status} onRetry={save} />
+          </div>
+        }
+      />
 
       {/* Toolbar */}
-      <div className="border-b border-line bg-surface/70">
-        <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="sticky top-16 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-2 px-4 py-2.5 sm:px-6">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             aria-label="CV title"
-            className="min-w-0 rounded-lg bg-transparent px-1 py-1 font-display text-lg font-bold text-ink outline-none transition-colors hover:bg-ink/[0.03] focus:bg-ink/[0.04]"
+            className="min-w-0 flex-1 rounded-lg bg-transparent px-1 py-1 font-display text-base font-bold text-ink outline-none transition-colors hover:bg-ink/[0.03] focus:bg-ink/[0.04] sm:text-lg"
           />
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-line-strong bg-canvas p-0.5">
+          <div className="md:hidden">
+            <SaveIndicator status={status} onRetry={save} />
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden rounded-lg border border-line-strong bg-canvas p-0.5 sm:flex">
               {TEMPLATES.map((t) => (
                 <button
                   key={t.id}
@@ -227,236 +370,312 @@ export function BuilderClient({
                 </button>
               ))}
             </div>
-            <Button size="sm" variant={saved ? "secondary" : "primary"} onClick={save}>
-              {saved ? (
-                <>
-                  <Check className="h-4 w-4" /> Saved
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" /> Save
-                </>
-              )}
-            </Button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-line-strong bg-surface text-ink-soft transition-colors hover:text-ink"
+                aria-label="CV actions"
+                aria-haspopup="menu"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+              <AnimatePresence>
+                {menuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 z-40 mt-2 w-48 overflow-hidden rounded-xl border border-line bg-surface p-1.5 shadow-lift"
+                    role="menu"
+                  >
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleDuplicate}
+                      disabled={duplicating}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-ink/[0.04] hover:text-ink disabled:opacity-60"
+                      role="menuitem"
+                    >
+                      {duplicating ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setConfirmDelete(true);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+                      role="menuitem"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
+        </div>
+
+        {/* Mobile Edit/Preview toggle + template */}
+        <div className="mx-auto flex w-full max-w-[1500px] items-center gap-2 px-4 pb-2.5 lg:hidden">
+          <div className="flex flex-1 rounded-lg border border-line-strong bg-canvas p-0.5">
+            <button
+              type="button"
+              onClick={() => setView("edit")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-semibold transition-colors",
+                view === "edit" ? "bg-surface text-ink shadow-subtle" : "text-ink-muted"
+              )}
+            >
+              <Pencil className="h-4 w-4" /> Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("preview")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-semibold transition-colors",
+                view === "preview"
+                  ? "bg-surface text-ink shadow-subtle"
+                  : "text-ink-muted"
+              )}
+            >
+              <Eye className="h-4 w-4" /> Preview
+            </button>
+          </div>
+          <select
+            value={cv.template}
+            onChange={(e) => setTemplate(e.target.value as TemplateId)}
+            aria-label="Template"
+            className="rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-sm font-semibold text-ink"
+          >
+            {TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Main */}
-      <div className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 gap-0 lg:grid-cols-[236px_minmax(0,1fr)_minmax(400px,44%)]">
-        {/* Step rail (desktop) */}
-        <aside className="hidden border-r border-line px-3 py-6 lg:block">
-          <div className="sticky top-[80px]">
-            <p className="px-3 pb-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Sections
-            </p>
-            <nav className="space-y-0.5">
-              {STEPS.map((s, i) => {
-                const isActive = i === active;
-                const done = complete[s.key];
-                return (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => setActive(i)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors",
-                      isActive
-                        ? "bg-brand-50 font-semibold text-brand-700"
-                        : "text-ink-soft hover:bg-ink/[0.03] hover:text-ink"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid h-5 w-5 shrink-0 place-items-center rounded-full text-[0.65rem] font-bold",
-                        done
-                          ? "bg-brand-600 text-white"
-                          : isActive
-                          ? "border border-brand-500 text-brand-600"
-                          : "border border-line-strong text-ink-faint"
-                      )}
-                    >
-                      {done ? <Check className="h-3 w-3" /> : i + 1}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{s.label}</span>
-                    {!s.enabled && (
-                      <span className="shrink-0 rounded bg-line px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-ink-faint">
-                        Soon
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        </aside>
-
-        {/* Form column */}
-        <section className="min-w-0 px-4 py-6 pb-28 sm:px-8 lg:pb-8">
-          {/* Mobile step chips */}
-          <div className="mb-5 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+      {/* Main split: ~40% editor / ~60% preview */}
+      <div className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 lg:grid-cols-[minmax(0,42%)_minmax(0,58%)]">
+        {/* Editor */}
+        <section
+          className={cn(
+            "min-w-0 px-4 py-6 sm:px-6",
+            view === "preview" && "hidden lg:block"
+          )}
+        >
+          {/* Step nav */}
+          <nav className="-mx-1 mb-6 flex gap-2 overflow-x-auto px-1 pb-1 lg:flex-wrap lg:overflow-visible">
             {STEPS.map((s, i) => (
               <button
                 key={s.key}
                 type="button"
                 onClick={() => setActive(i)}
                 className={cn(
-                  "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                  "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                   i === active
                     ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-line-strong text-ink-soft"
+                    : "border-line-strong text-ink-soft hover:border-ink/30"
                 )}
               >
-                {i + 1}. {s.label}
+                <span
+                  className={cn(
+                    "grid h-4 w-4 place-items-center rounded-full text-[0.6rem]",
+                    complete[s.key]
+                      ? i === active
+                        ? "bg-white/25"
+                        : "bg-brand-100 text-brand-700"
+                      : i === active
+                      ? "bg-white/25"
+                      : "bg-line text-ink-faint"
+                  )}
+                >
+                  {complete[s.key] ? <Check className="h-2.5 w-2.5" /> : i + 1}
+                </span>
+                {s.label}
               </button>
             ))}
+          </nav>
+
+          <div className="mb-1 text-xs font-medium text-ink-faint">
+            Step {active + 1} of {STEPS.length}
           </div>
+          <h1 className="font-display text-2xl font-extrabold text-ink">
+            {STEP_TITLES[step.key]}
+          </h1>
 
-          <div className="mx-auto max-w-2xl">
-            <div className="mb-1 flex items-center gap-2 text-xs font-medium text-ink-faint">
-              Step {active + 1} of {STEPS.length}
-            </div>
-            <h1 className="font-display text-2xl font-extrabold text-ink">
-              {step.label}
-            </h1>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step.key}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-6"
+            >
+              {step.key === "personal" && (
+                <PersonalSection
+                  personal={cv.personal}
+                  onChange={setPersonal}
+                  errors={errors}
+                />
+              )}
+              {step.key === "summary" && (
+                <SummarySection summary={cv.summary} onChange={setSummary} />
+              )}
+              {step.key === "experience" && (
+                <ExperienceSection
+                  items={cv.experiences}
+                  onAdd={addExperience}
+                  onUpdate={updateExperience}
+                  onRemove={removeExperience}
+                />
+              )}
+              {step.key === "education" && (
+                <EducationSection
+                  items={cv.educations}
+                  onAdd={addEducation}
+                  onUpdate={updateEducation}
+                  onRemove={removeEducation}
+                />
+              )}
+              {step.key === "skills" && (
+                <SkillsSection
+                  items={cv.skills}
+                  onAdd={addSkill}
+                  onUpdate={updateSkill}
+                  onRemove={removeSkill}
+                />
+              )}
+              {step.key === "projects" && (
+                <ProjectsSection
+                  items={cv.projects}
+                  onAdd={addProject}
+                  onUpdate={updateProject}
+                  onRemove={removeProject}
+                />
+              )}
+              {step.key === "certifications" && (
+                <CertificationsSection
+                  items={cv.certifications}
+                  onAdd={addCertification}
+                  onUpdate={updateCertification}
+                  onRemove={removeCertification}
+                />
+              )}
+              {step.key === "languages" && (
+                <LanguagesSection
+                  items={cv.languages}
+                  onAdd={addLanguage}
+                  onUpdate={updateLanguage}
+                  onRemove={removeLanguage}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
 
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step.key}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                className="mt-6"
-              >
-                {step.key === "personal" && (
-                  <PersonalSection
-                    personal={cv.personal}
-                    onChange={setPersonal}
-                  />
-                )}
-                {step.key === "summary" && (
-                  <SummarySection summary={cv.summary} onChange={setSummary} />
-                )}
-                {step.key === "experience" && (
-                  <ExperienceSection
-                    items={cv.experiences}
-                    add={addExperience}
-                    update={updateExperience}
-                    remove={removeExperience}
-                  />
-                )}
-                {step.key === "education" && (
-                  <EducationSection
-                    items={cv.educations}
-                    add={addEducation}
-                    update={updateEducation}
-                    remove={removeEducation}
-                  />
-                )}
-                {step.key === "skills" && (
-                  <SkillsSection
-                    items={cv.skills}
-                    add={addSkill}
-                    update={updateSkill}
-                    remove={removeSkill}
-                  />
-                )}
-                {!step.enabled && <UpcomingSection title={step.label} />}
-              </motion.div>
-            </AnimatePresence>
-
-            {/* Desktop step controls */}
-            <div className="mt-8 hidden items-center justify-between border-t border-line pt-6 lg:flex">
-              <Button
-                variant="secondary"
-                onClick={goPrev}
-                disabled={active === 0}
-              >
-                <ChevronLeft className="h-4 w-4" /> Back
-              </Button>
-              <Button onClick={goNext} disabled={active === STEPS.length - 1}>
+          <div className="mt-8 flex items-center justify-between border-t border-line pt-6">
+            <Button variant="secondary" onClick={goPrev} disabled={active === 0}>
+              <ChevronLeft className="h-4 w-4" /> Back
+            </Button>
+            {active < STEPS.length - 1 ? (
+              <Button onClick={goNext}>
                 Next <ChevronRight className="h-4 w-4" />
               </Button>
-            </div>
+            ) : (
+              <Button variant="secondary" href="/dashboard">
+                Done
+              </Button>
+            )}
           </div>
         </section>
 
-        {/* Preview (desktop) */}
-        <aside className="hidden border-l border-line bg-[#F4F2EC] lg:block">
-          <div className="sticky top-[64px] max-h-[calc(100vh-64px)] overflow-y-auto p-6 thin-scroll">
-            <p className="mb-4 flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              <Eye className="h-3.5 w-3.5" /> Live preview
-            </p>
-            <A4Frame>
-              <CVDocument data={cv} />
-            </A4Frame>
+        {/* Preview */}
+        <aside
+          className={cn(
+            "border-t border-line bg-[#F4F2EC] lg:border-l lg:border-t-0",
+            view === "edit" && "hidden lg:block"
+          )}
+        >
+          <div className="lg:sticky lg:top-[132px] lg:max-h-[calc(100vh-132px)] lg:overflow-y-auto lg:thin-scroll">
+            <div className="p-5 sm:p-8">
+              <p className="mb-4 hidden items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-ink-faint lg:flex">
+                <Eye className="h-3.5 w-3.5" /> Live preview
+              </p>
+              <A4Frame className="mx-auto max-w-[640px]">
+                <CVDocument data={cv} />
+              </A4Frame>
+            </div>
           </div>
         </aside>
       </div>
 
-      {/* Mobile sticky action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 px-4 py-3 backdrop-blur-md lg:hidden">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={goPrev}
-            disabled={active === 0}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line-strong bg-surface text-ink disabled:opacity-40"
-            aria-label="Previous section"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <Button
-            variant="dark"
-            className="flex-1"
-            onClick={() => setMobilePreview(true)}
-          >
-            <Eye className="h-[18px] w-[18px]" /> Preview
-          </Button>
-          <button
-            type="button"
-            onClick={goNext}
-            disabled={active === STEPS.length - 1}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-line-strong bg-surface text-ink disabled:opacity-40"
-            aria-label="Next section"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+      {/* Delete confirmation */}
+      <Modal
+        open={confirmDelete}
+        onClose={() => !deleting && setConfirmDelete(false)}
+        labelledBy="builder-delete-title"
+      >
+        <div className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-red-50 text-red-600">
+          <Trash2 className="h-5 w-5" />
         </div>
-      </div>
-
-      {/* Mobile preview overlay */}
-      <AnimatePresence>
-        {mobilePreview && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex flex-col bg-[#F4F2EC] lg:hidden"
+        <h2
+          id="builder-delete-title"
+          className="font-display text-xl font-bold text-ink"
+        >
+          Delete this CV?
+        </h2>
+        <p className="mt-2 text-ink-muted">
+          <span className="font-medium text-ink">{title}</span> and all of its
+          information will be permanently deleted. This can&apos;t be undone.
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setConfirmDelete(false)}
+            disabled={deleting}
           >
-            <div className="flex items-center justify-between border-b border-line bg-canvas px-4 py-3">
-              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <Eye className="h-4 w-4 text-brand-600" /> CV Preview
-              </p>
-              <button
-                type="button"
-                onClick={() => setMobilePreview(false)}
-                className="grid h-9 w-9 place-items-center rounded-lg text-ink hover:bg-ink/[0.05]"
-                aria-label="Close preview"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <A4Frame className="mx-auto max-w-[520px]">
-                <CVDocument data={cv} />
-              </A4Frame>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="bg-red-600 shadow-none hover:bg-red-700"
+          >
+            {deleting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+              </>
+            ) : (
+              "Delete CV"
+            )}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
+
+const STEP_TITLES: Record<StepKey, string> = {
+  personal: "Personal Information",
+  summary: "Professional Summary",
+  experience: "Experience",
+  education: "Education",
+  skills: "Skills",
+  projects: "Projects",
+  certifications: "Certifications",
+  languages: "Languages",
+};

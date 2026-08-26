@@ -1,13 +1,34 @@
 "use client";
 
-export function GoogleButton({ label }: { label: string }) {
+import { useState } from "react";
+import { signInWithGoogle } from "@/lib/auth/client";
+
+export function GoogleButton({
+  label,
+  onError,
+}: {
+  label: string;
+  onError?: (message: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    if (loading) return;
+    setLoading(true);
+    const { error } = await signInWithGoogle();
+    if (error) {
+      onError?.(error);
+      setLoading(false);
+    }
+    // On success the browser is redirected to Google, so no further UI needed.
+  };
+
   return (
     <button
       type="button"
-      onClick={() =>
-        alert("Google sign-in is coming in a later sprint. Use email to continue.")
-      }
-      className="flex w-full items-center justify-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-[0.95rem] font-semibold text-ink transition-colors hover:border-ink/30 hover:bg-canvas"
+      onClick={handle}
+      disabled={loading}
+      className="flex w-full items-center justify-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-[0.95rem] font-semibold text-ink transition-colors hover:border-ink/30 hover:bg-canvas disabled:opacity-60"
     >
       <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" aria-hidden>
         <path
@@ -27,7 +48,7 @@ export function GoogleButton({ label }: { label: string }) {
           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.05l3.66 2.84C6.71 7.3 9.14 5.38 12 5.38Z"
         />
       </svg>
-      {label}
+      {loading ? "Connecting…" : label}
     </button>
   );
 }

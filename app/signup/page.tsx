@@ -3,11 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
 import { Input, FieldGroup } from "@/components/ui/Field";
-import { setUser } from "@/lib/auth";
+import { signUpWithPassword } from "@/lib/auth/client";
+import { isValidEmail } from "@/lib/validation";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,12 +17,31 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+    setError(null);
+
+    if (!name.trim()) return setError("Please enter your full name.");
+    if (!isValidEmail(email)) return setError("Please enter a valid email address.");
+    if (password.length < 6)
+      return setError("Password must be at least 6 characters.");
+
     setLoading(true);
-    setUser({ name: name.trim() || "there", email });
+    const { error } = await signUpWithPassword(
+      name.trim(),
+      email.trim(),
+      password
+    );
+    if (error) {
+      setError(error);
+      setLoading(false);
+      return;
+    }
     router.push("/dashboard");
+    router.refresh();
   };
 
   return (
@@ -32,7 +53,14 @@ export default function SignupPage() {
         Build your first CV in minutes — no card required.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
+      {error && (
+        <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <FieldGroup label="Full name" htmlFor="name">
           <Input
             id="name"
@@ -63,7 +91,7 @@ export default function SignupPage() {
             type="password"
             required
             autoComplete="new-password"
-            placeholder="Create a password"
+            placeholder="At least 6 characters"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -82,7 +110,7 @@ export default function SignupPage() {
         <div className="h-px flex-1 bg-line" />
       </div>
 
-      <GoogleButton label="Continue with Google" />
+      <GoogleButton label="Continue with Google" onError={setError} />
 
       <p className="mt-6 text-center text-xs leading-relaxed text-ink-faint">
         By creating an account you agree to our{" "}

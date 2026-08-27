@@ -7,9 +7,14 @@ Cameroonian students, graduates, professionals, freelancers and job seekers.
 Choose a design, add your experience, preview it instantly, and get ready to
 apply.
 
-**Sprint 2** turns the UI into a real application: real authentication, a
+**Sprint 2** turned the UI into a real application: real authentication, a
 Postgres database with per-user ownership, full CRUD for CVs, autosave, and an
 8-section builder with a live A4 preview.
+
+**Sprint 3** adds professional document generation: real, text-selectable,
+multi-page A4 **PDF export** (server-side with `@react-pdf/renderer`) for all
+three templates, a print-only view, save-before-export, validation, and a
+premium download experience.
 
 ## Tech stack
 
@@ -82,12 +87,40 @@ All routes determine the user server-side and enforce ownership.
 | `GET/POST` | `/api/cv` | List / create CVs |
 | `GET/PATCH/DELETE` | `/api/cv/[id]` | Load / save (full replace) / delete a CV |
 | `POST` | `/api/cv/[id]/duplicate` | Duplicate a CV with all sections |
+| `POST` | `/api/cv/[id]/export` | Generate & return the CV as a PDF (auth + ownership) |
 | `POST` | `/api/auth/{signup,login,logout}` | Local auth provider |
 | `GET` | `/auth/callback` | Supabase OAuth callback |
 
 The builder autosaves the entire CV via a debounced `PATCH /api/cv/[id]`, which
 updates the CV inside a transaction (scalar fields + a clean rewrite of each
 section table), so a single owned, validated write keeps everything consistent.
+
+## PDF export & print
+
+The **same `CVData` model** drives three outputs from one source of truth:
+
+```
+CVData ──► web template renderer   (components/cv/CVDocument)  ──► live preview + print view
+      └──► PDF template renderer   (components/pdf/*)          ──► @react-pdf/renderer ──► PDF
+```
+
+- **Download PDF** (builder toolbar): validates the CV → flushes any pending
+  autosave → `POST /api/cv/[id]/export` → downloads a real, text-selectable A4
+  PDF named `First_Last_CV.pdf`. The user stays in the builder and sees a
+  success modal. Duplicate clicks are prevented.
+- Server-side generation means the PDF always uses the latest **saved,
+  owned** data — never stale form state and never another user's CV.
+- Multi-page: content flows onto further A4 pages; entries stay together
+  (`wrap={false}`) and section headings avoid orphaning (`minPresenceAhead`).
+- Empty sections are omitted entirely (no bare headings).
+- **Print CV** (⋯ menu) opens `/builder/[id]/print` — a print-only view that
+  hides all app chrome and prints just the CV via `@media print` + `@page A4`.
+- `ExportEvent` records `{ userId, cvId, template, type, createdAt }` as the
+  foundation for later download analytics / free-vs-premium limits (no limits
+  are enforced yet).
+
+No new environment variables are needed — PDF generation runs entirely
+server-side in the Node.js runtime with built-in fonts.
 
 ## Project structure
 
@@ -97,14 +130,16 @@ app/
   login/  signup/     auth screens (mode-aware)
   auth/callback/      Supabase OAuth callback
   dashboard/          CV list, create/duplicate/delete
-  builder/[id]/       CV builder (autosave + live preview)
+  builder/[id]/       CV builder (autosave + live preview + PDF export)
+  builder/[id]/print/ print-only CV view
   builder/new/        creates a CV record, redirects to /builder/[id]
-  api/                cv + auth route handlers
+  api/                cv (incl. export) + auth route handlers
 components/
-  marketing/ app/ builder/ cv/ auth/ ui/
+  marketing/ app/ builder/ cv/ pdf/ auth/ ui/
 lib/
   auth/               config, password (scrypt), session (HMAC), server + client
   server/             cv-service (ownership), cv-mapper, api helpers
+  pdf/                render (react-pdf), filename, validate, download
   cv-types.ts         template-independent CV model + sample data
   supabase/           browser + server clients
   prisma.ts  validation.ts  format.ts  utils.ts
@@ -127,8 +162,20 @@ autosave → leave → reopen (persisted) → duplicate → delete → safe not-
 missing and other-users' CVs (page + API return 404). Responsive with no
 horizontal overflow at 375 / 390 / 414 / 768.
 
+## Sprint 3 status
+
+Verified with an automated browser + PDF-inspection run (poppler `pdfinfo`/
+`pdftotext`): all three templates export real multi-page PDFs with selectable
+text (name, experience, skills, certifications all machine-readable), empty
+sections are hidden, filename is `First_Last_CV.pdf`, near-empty CVs are blocked
+with a friendly message (422), and the export endpoint returns 404 for other
+users' CVs and 401 when logged out. A real browser download of
+`Alex_Mbarga_CV.pdf` and the success modal were confirmed end-to-end, with no
+console errors and no layout overflow.
+
 ## Not yet implemented (later sprints)
 
-Payments, AI generation, real PDF export, advanced ATS analysis.
+Payments / subscription enforcement, AI generation, advanced ATS scoring,
+cover letters.
 
 © 2026 CVForge

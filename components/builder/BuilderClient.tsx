@@ -14,6 +14,8 @@ import {
   Trash2,
   MoreHorizontal,
   Loader2,
+  Download,
+  Printer,
 } from "lucide-react";
 import { AppHeader, type HeaderUser } from "@/components/app/AppHeader";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +23,9 @@ import { Modal } from "@/components/ui/Modal";
 import { A4Frame } from "@/components/cv/A4Frame";
 import { CVDocument } from "@/components/cv/CVDocument";
 import { SaveIndicator, type SaveStatus } from "./SaveIndicator";
+import { useExport } from "./useExport";
+import { ExportModal } from "./ExportModal";
+import { DownloadButton } from "./DownloadButton";
 import {
   PersonalSection,
   SummarySection,
@@ -98,25 +103,45 @@ export function BuilderClient({
   const latest = useRef({ cv, title });
   latest.current = { cv, title };
   const timer = useRef<ReturnType<typeof setTimeout>>();
-  const dirty = useRef(false);
+  const pending = useRef(false); // unsaved edits exist
+  const inFlight = useRef<Promise<void> | null>(null);
   const skipFirst = useRef(true);
 
-  const save = useCallback(async () => {
+  // Single POST that persists the latest state.
+  const doSave = useCallback(async () => {
     const { cv: c, title: t } = latest.current;
     setStatus("saving");
-    try {
-      const res = await fetch(`/api/cv/${cvId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: t, ...c }),
-      });
-      if (!res.ok) throw new Error();
-      dirty.current = false;
-      setStatus("saved");
-    } catch {
-      setStatus("error");
-    }
+    const res = await fetch(`/api/cv/${cvId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: t, ...c }),
+    });
+    if (!res.ok) throw new Error("save failed");
+    pending.current = false;
+    setStatus("saved");
   }, [cvId]);
+
+  // Single-flight save: never runs two PATCHes at once.
+  const runSave = useCallback(async () => {
+    if (inFlight.current) {
+      try {
+        await inFlight.current;
+      } catch {
+        /* fall through to retry below */
+      }
+    }
+    if (!pending.current) return;
+    const p = doSave()
+      .catch((e) => {
+        setStatus("error");
+        throw e;
+      })
+      .finally(() => {
+        inFlight.current = null;
+      });
+    inFlight.current = p;
+    await p;
+  }, [doSave]);
 
   // Debounced autosave whenever content changes.
   useEffect(() => {
@@ -124,19 +149,39 @@ export function BuilderClient({
       skipFirst.current = false;
       return;
     }
-    dirty.current = true;
+    pending.current = true;
     setStatus("unsaved");
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(save, AUTOSAVE_DELAY);
+    timer.current = setTimeout(() => {
+      runSave().catch(() => {});
+    }, AUTOSAVE_DELAY);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [cv, title, save]);
+  }, [cv, title, runSave]);
+
+  // Retry handler for the save indicator.
+  const retrySave = useCallback(() => {
+    runSave().catch(() => {});
+  }, [runSave]);
+
+  // Flush any pending save immediately (used before exporting).
+  const flushSave = useCallback(async () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (inFlight.current) {
+      try {
+        await inFlight.current;
+      } catch {
+        /* will retry below if still pending */
+      }
+    }
+    if (pending.current) await runSave();
+  }, [runSave]);
 
   // Warn before leaving with unsaved work.
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (dirty.current || status === "saving") {
+      if (pending.current || status === "saving") {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -144,6 +189,16 @@ export function BuilderClient({
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [status]);
+
+  /* ------------- PDF export ------------- */
+  const cvRef = useRef(cv);
+  cvRef.current = cv;
+  const {
+    status: exportStatus,
+    error: exportError,
+    download: downloadPdf,
+    reset: resetExport,
+  } = useExport({ cvId, getData: () => cvRef.current, flushSave });
 
   /* ------------- validation ------------- */
   const errors = useMemo(() => {
@@ -302,7 +357,7 @@ export function BuilderClient({
       const res = await fetch(`/api/cv/${cvId}/duplicate`, { method: "POST" });
       if (!res.ok) throw new Error();
       const { cv: copy } = await res.json();
-      dirty.current = false;
+      pending.current = false;
       router.push(`/builder/${copy.id}`);
     } catch {
       setDuplicating(false);
@@ -316,12 +371,17 @@ export function BuilderClient({
     try {
       const res = await fetch(`/api/cv/${cvId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      dirty.current = false;
+      pending.current = false;
       router.push("/dashboard");
       router.refresh();
     } catch {
       setDeleting(false);
     }
+  };
+
+  const handlePrint = () => {
+    // Opens a print-only view of just the CV in a new tab and prints it.
+    window.open(`/builder/${cvId}/print`, "_blank", "noopener");
   };
 
   const goNext = () => setActive((i) => Math.min(i + 1, STEPS.length - 1));
@@ -334,7 +394,7 @@ export function BuilderClient({
         backHref="/dashboard"
         center={
           <div className="hidden items-center justify-center md:flex">
-            <SaveIndicator status={status} onRetry={save} />
+            <SaveIndicator status={status} onRetry={retrySave} />
           </div>
         }
       />
@@ -349,7 +409,7 @@ export function BuilderClient({
             className="min-w-0 flex-1 rounded-lg bg-transparent px-1 py-1 font-display text-base font-bold text-ink outline-none transition-colors hover:bg-ink/[0.03] focus:bg-ink/[0.04] sm:text-lg"
           />
           <div className="md:hidden">
-            <SaveIndicator status={status} onRetry={save} />
+            <SaveIndicator status={status} onRetry={retrySave} />
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -370,6 +430,12 @@ export function BuilderClient({
                 </button>
               ))}
             </div>
+
+            <DownloadButton
+              status={exportStatus}
+              onClick={downloadPdf}
+              className="hidden lg:inline-flex"
+            />
 
             <div className="relative">
               <button
@@ -406,6 +472,19 @@ export function BuilderClient({
                         <Copy className="h-4 w-4" />
                       )}
                       Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        handlePrint();
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-ink/[0.04] hover:text-ink"
+                      role="menuitem"
+                    >
+                      <Printer className="h-4 w-4" />
+                      Print CV
                     </button>
                     <button
                       type="button"
@@ -465,6 +544,7 @@ export function BuilderClient({
               </option>
             ))}
           </select>
+          <DownloadButton status={exportStatus} onClick={downloadPdf} compact />
         </div>
       </div>
 
@@ -665,6 +745,14 @@ export function BuilderClient({
           </Button>
         </div>
       </Modal>
+
+      {/* PDF export success / error feedback */}
+      <ExportModal
+        status={exportStatus}
+        error={exportError}
+        onClose={resetExport}
+        onRetry={downloadPdf}
+      />
     </div>
   );
 }

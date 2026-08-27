@@ -149,6 +149,23 @@ export async function deleteCV(userId: string, cvId: string): Promise<boolean> {
   return result.count > 0;
 }
 
+/** Record a PDF export event (foundation for later analytics / limits). */
+export async function recordExportEvent(
+  userId: string,
+  cvId: string,
+  template: string,
+  type = "PDF_DOWNLOAD"
+): Promise<void> {
+  try {
+    await prisma.exportEvent.create({
+      data: { userId, cvId, template, type },
+    });
+  } catch (err) {
+    // Never fail the download because analytics logging failed.
+    console.error("recordExportEvent failed:", err);
+  }
+}
+
 /** Duplicate a CV (owned by the user), copying all sections. */
 export async function duplicateCV(
   userId: string,

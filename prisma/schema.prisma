@@ -10,16 +10,33 @@ datasource db {
 /// A user profile. `id` mirrors the Supabase auth user id (uuid) in production,
 /// or a generated id when using the built-in local auth provider.
 model Profile {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String        @id @default(cuid())
+  email        String        @unique
   name         String?
   avatarUrl    String?
   /// Only set when using the built-in local auth provider (scrypt hash).
   /// Never set when authentication is delegated to Supabase.
   passwordHash String?
   cvs          CV[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  exportEvents ExportEvent[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+/// Lightweight event log — foundation for later download analytics / limits.
+model ExportEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvId      String?
+  cv        CV?      @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  template  String   @default("classic")
+  /// e.g. "PDF_DOWNLOAD"
+  type      String   @default("PDF_DOWNLOAD")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([cvId])
 }
 
 model CV {
@@ -37,6 +54,7 @@ model CV {
   projects       Project[]
   certifications Certification[]
   languages      Language[]
+  exportEvents   ExportEvent[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 

@@ -1,30 +1,27 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth/server";
-import { listCVs } from "@/lib/server/cv-service";
 import {
   listApplications,
   getApplicationStats,
 } from "@/lib/server/application-service";
-import { DashboardClient } from "@/components/app/DashboardClient";
+import { ApplicationsClient } from "@/components/application/ApplicationsClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function ApplicationsPage() {
   const user = await getAuthUser();
-  if (!user) redirect("/login?redirect=/dashboard");
+  if (!user) redirect("/login?redirect=/applications");
 
-  const [cvs, applications, stats] = await Promise.all([
-    listCVs(user.id),
+  const [applications, stats] = await Promise.all([
     listApplications(user.id),
     getApplicationStats(user.id),
   ]);
 
   return (
-    <DashboardClient
+    <ApplicationsClient
       user={{ name: user.name, email: user.email, avatarUrl: user.avatarUrl }}
-      initialCVs={cvs}
-      stats={stats}
-      recentApplications={applications.slice(0, 4)}
+      initial={applications}
+      initialStats={stats}
     />
   );
 }

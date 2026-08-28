@@ -11,10 +11,17 @@ apply.
 Postgres database with per-user ownership, full CRUD for CVs, autosave, and an
 8-section builder with a live A4 preview.
 
-**Sprint 3** adds professional document generation: real, text-selectable,
+**Sprint 3** added professional document generation: real, text-selectable,
 multi-page A4 **PDF export** (server-side with `@react-pdf/renderer`) for all
 three templates, a print-only view, save-before-export, validation, and a
 premium download experience.
+
+**Sprint 4** expands CVForge into a full **job application toolkit**: a cover
+letter builder (with its own PDF export), a structured application email
+generator, and an application workspace — a guided create flow, a tracker with
+status management, a real-data funnel/stats, search & filter, and per-user
+history. CVs and cover letters are reused across the flow. Everything persists
+with the same ownership guarantees.
 
 ## Tech stack
 
@@ -88,8 +95,19 @@ All routes determine the user server-side and enforce ownership.
 | `GET/PATCH/DELETE` | `/api/cv/[id]` | Load / save (full replace) / delete a CV |
 | `POST` | `/api/cv/[id]/duplicate` | Duplicate a CV with all sections |
 | `POST` | `/api/cv/[id]/export` | Generate & return the CV as a PDF (auth + ownership) |
+| `GET/POST` | `/api/cover-letters` | List / create cover letters (starter content from a CV) |
+| `GET/PATCH/DELETE` | `/api/cover-letters/[id]` | Load / autosave / delete a cover letter |
+| `POST` | `/api/cover-letters/[id]/export` | Cover letter PDF (auth + ownership) |
+| `GET/POST` | `/api/applications` | List / create applications |
+| `GET/PATCH/DELETE` | `/api/applications/[id]` | Load / update (incl. status) / delete an application |
+| `POST` | `/api/application-emails` | Create an application email (optionally linked to an application) |
+| `GET/PATCH/DELETE` | `/api/application-emails/[id]` | Load / edit / delete an application email |
 | `POST` | `/api/auth/{signup,login,logout}` | Local auth provider |
 | `GET` | `/auth/callback` | Supabase OAuth callback |
+
+Every route determines the user server-side and verifies ownership before any
+read or write; referenced `cvId` / `coverLetterId` are validated against the
+authenticated user, and missing/other-users' records return a safe `404`.
 
 The builder autosaves the entire CV via a debounced `PATCH /api/cv/[id]`, which
 updates the CV inside a transaction (scalar fields + a clean rewrite of each
@@ -161,6 +179,29 @@ sign up → log out → log in → create CV → fill personal / summary / exper
 autosave → leave → reopen (persisted) → duplicate → delete → safe not-found for
 missing and other-users' CVs (page + API return 404). Responsive with no
 horizontal overflow at 375 / 390 / 414 / 768.
+
+## Sprint 4 — job application toolkit
+
+- **Cover letters** (`/cover-letters`, `/cover-letters/new`, `/cover-letters/[id]`):
+  pick a CV to reuse your details, get structured **starter content** (a
+  template filled with your real CV info — not AI prose), edit in an editor +
+  live A4 preview, autosave, switch templates (Classic / Modern) and download a
+  selectable-text **PDF**.
+- **Application email** (`/application-email/new` and inside an application):
+  structured template populated from your CV — Copy Email, Copy Subject,
+  Regenerate, Edit. CVForge prepares the email; it never sends it.
+- **Applications** (`/applications`, `/applications/new`, `/applications/[id]`):
+  a guided 5-step create flow (Job details → CV → Cover letter → Email →
+  Review), a tracker with a **table on desktop / cards on mobile**, inline
+  status management (Saved · Preparing · Applied · Interview · Offer ·
+  Rejected), a real-data **funnel + stats**, search, status filter and sort.
+- The dashboard adds **Quick Actions** and a **Your Job Applications** summary
+  with real numbers. Statuses use a labelled dot + text (never color alone). No
+  "submitted" wording — the user marks an application **Applied** themselves.
+
+Data model additions: `CoverLetter`, `Application`, `ApplicationEmail` (with
+`ExportEvent` from Sprint 3). RLS policies for all three are in
+`prisma/supabase-rls.sql`. No new environment variables are required.
 
 ## Sprint 3 status
 

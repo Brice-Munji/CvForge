@@ -10,11 +10,13 @@ export function ExportModal({
   error,
   onClose,
   onRetry,
+  noun = "CV",
 }: {
   status: ExportStatus;
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
+  noun?: string;
 }) {
   const open = status === "success" || status === "error";
   const isSuccess = status === "success";
@@ -34,11 +36,11 @@ export function ExportModal({
       </div>
 
       <h2 id="export-modal-title" className="font-display text-xl font-bold text-ink">
-        {isSuccess ? "Your CV is ready." : "Couldn't generate PDF"}
+        {isSuccess ? `Your ${noun} is ready.` : "Couldn't generate PDF"}
       </h2>
       <p className="mt-2 text-ink-muted">
         {isSuccess
-          ? "Your professional CV has been downloaded. It's ready to send to employers, attach to emails, or print."
+          ? `Your professional ${noun} has been downloaded. It's ready to send to employers, attach to emails, or print.`
           : error || "Something went wrong while creating your PDF. Please try again."}
       </p>
 

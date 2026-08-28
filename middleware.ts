@@ -3,7 +3,13 @@ import { createServerClient } from "@supabase/ssr";
 import { SESSION_COOKIE, supabaseEnabled } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
 
-const PROTECTED = ["/dashboard", "/builder"];
+const PROTECTED = [
+  "/dashboard",
+  "/builder",
+  "/cover-letters",
+  "/applications",
+  "/application-email",
+];
 const AUTH_PAGES = ["/login", "/signup"];
 
 export async function middleware(req: NextRequest) {
@@ -68,5 +74,13 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/builder/:path*", "/login", "/signup"],
+  matcher: [
+    "/dashboard/:path*",
+    "/builder/:path*",
+    "/cover-letters/:path*",
+    "/applications/:path*",
+    "/application-email/:path*",
+    "/login",
+    "/signup",
+  ],
 };

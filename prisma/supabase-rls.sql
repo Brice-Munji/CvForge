@@ -56,3 +56,23 @@ create policy "own certifications" on "Certification"
 create policy "own languages" on "Language"
   for all using (exists (select 1 from "CV" where "CV".id = "Language"."cvId" and "CV"."userId" = auth.uid()::text))
   with check (exists (select 1 from "CV" where "CV".id = "Language"."cvId" and "CV"."userId" = auth.uid()::text));
+
+-- ─────────────────────────────────────────────────────────────
+-- Sprint 4 tables
+-- ─────────────────────────────────────────────────────────────
+
+alter table "CoverLetter"      enable row level security;
+alter table "Application"      enable row level security;
+alter table "ApplicationEmail" enable row level security;
+
+create policy "own cover letters" on "CoverLetter"
+  for all using (auth.uid()::text = "userId")
+  with check (auth.uid()::text = "userId");
+
+create policy "own applications" on "Application"
+  for all using (auth.uid()::text = "userId")
+  with check (auth.uid()::text = "userId");
+
+create policy "own application emails" on "ApplicationEmail"
+  for all using (auth.uid()::text = "userId")
+  with check (auth.uid()::text = "userId");

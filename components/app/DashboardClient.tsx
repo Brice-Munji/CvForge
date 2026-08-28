@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import {
   Plus,
   FileText,
@@ -11,12 +12,19 @@ import {
   Loader2,
   X,
   Trash2,
+  Mail,
+  Briefcase,
+  ArrowRight,
 } from "lucide-react";
 import { AppHeader, type HeaderUser } from "@/components/app/AppHeader";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { CVCard } from "@/components/app/CVCard";
+import { StatusBadge } from "@/components/app/StatusBadge";
+import { relativeTime } from "@/lib/format";
 import type { CVListItem } from "@/lib/server/cv-service";
+import type { ApplicationListItem } from "@/lib/server/application-service";
+import type { ApplicationStats } from "@/lib/application-types";
 import type { TemplateId } from "@/lib/cv-types";
 
 const QUICK_TEMPLATES: { id: TemplateId; name: string; note: string }[] = [
@@ -28,9 +36,13 @@ const QUICK_TEMPLATES: { id: TemplateId; name: string; note: string }[] = [
 export function DashboardClient({
   user,
   initialCVs,
+  stats,
+  recentApplications,
 }: {
   user: HeaderUser;
   initialCVs: CVListItem[];
+  stats: ApplicationStats;
+  recentApplications: ApplicationListItem[];
 }) {
   const router = useRouter();
   const [cvs, setCvs] = useState<CVListItem[]>(initialCVs);
@@ -99,38 +111,18 @@ export function DashboardClient({
 
   return (
     <div className="min-h-screen bg-canvas">
-      <AppHeader user={user} />
+      <AppHeader user={user} nav />
 
       <main className="mx-auto w-full max-w-content px-5 py-10 sm:px-8 sm:py-14">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="eyebrow">Dashboard</p>
-            <h1 className="mt-2 text-heading font-extrabold text-ink">
-              Let&apos;s build your next CV{firstName ? `, ${firstName}` : ""}.
-            </h1>
-            <p className="mt-2 max-w-lg text-ink-muted">
-              Create, edit and manage your CVs. Everything saves automatically as
-              you go.
-            </p>
-          </div>
-          <Button
-            onClick={() => handleCreate("classic")}
-            size="lg"
-            className="shrink-0"
-            disabled={creating}
-          >
-            {creating ? (
-              <>
-                <Loader2 className="h-[18px] w-[18px] animate-spin" />
-                Creating CV…
-              </>
-            ) : (
-              <>
-                <Plus className="h-[18px] w-[18px]" />
-                Create New CV
-              </>
-            )}
-          </Button>
+        <div>
+          <p className="eyebrow">Dashboard</p>
+          <h1 className="mt-2 text-heading font-extrabold text-ink">
+            {firstName ? `Welcome back, ${firstName}.` : "Welcome back."}
+          </h1>
+          <p className="mt-2 max-w-xl text-ink-muted">
+            Everything you need to apply with confidence — your CVs, cover
+            letters, application emails and job tracking, in one place.
+          </p>
         </div>
 
         {error && (
@@ -145,10 +137,121 @@ export function DashboardClient({
           </div>
         )}
 
-        <section className="mt-10">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-ink-faint">
-            {isEmpty ? "Get started" : "Your CVs"}
+        {/* Quick actions */}
+        <section className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-ink-faint">
+            Quick actions
           </h2>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <QuickAction
+              icon={<FileText className="h-5 w-5" />}
+              label="Create CV"
+              onClick={() => handleCreate("classic")}
+              busy={creating}
+            />
+            <QuickAction
+              icon={<Mail className="h-5 w-5" />}
+              label="Write Cover Letter"
+              href="/cover-letters/new"
+            />
+            <QuickAction
+              icon={<Briefcase className="h-5 w-5" />}
+              label="Create Application"
+              href="/applications/new"
+            />
+            <QuickAction
+              icon={<Sparkles className="h-5 w-5" />}
+              label="Track Application"
+              href="/applications"
+            />
+          </div>
+        </section>
+
+        {/* Your job applications */}
+        <section className="mt-10">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              Your job applications
+            </h2>
+            <Link
+              href="/applications"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700"
+            >
+              View all <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: "Applications", value: stats.total },
+              { label: "Sent", value: stats.applied },
+              { label: "Interviews", value: stats.interviews },
+              { label: "Offers", value: stats.offers },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="rounded-2xl border border-line bg-surface px-4 py-4"
+              >
+                <p className="font-display text-3xl font-extrabold text-ink">
+                  {s.value}
+                </p>
+                <p className="mt-0.5 text-sm text-ink-muted">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {recentApplications.length > 0 ? (
+            <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+              {recentApplications.map((a) => (
+                <Link
+                  key={a.id}
+                  href={`/applications/${a.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-canvas/60"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink">
+                      {a.companyName || "Untitled company"}
+                    </p>
+                    <p className="truncate text-xs text-ink-muted">
+                      {a.jobTitle || "—"} · Updated {relativeTime(a.updatedAt)}
+                    </p>
+                  </div>
+                  <StatusBadge status={a.status} />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-col items-center justify-between gap-3 rounded-2xl border border-dashed border-line-strong bg-surface/60 px-5 py-6 text-center sm:flex-row sm:text-left">
+              <p className="text-sm text-ink-muted">
+                No applications yet — keep your job search organized in one place.
+              </p>
+              <Button href="/applications/new" className="shrink-0">
+                <Plus className="h-4 w-4" /> Track a Job Application
+              </Button>
+            </div>
+          )}
+        </section>
+
+        {/* CVs */}
+        <section id="cvs" className="mt-12 scroll-mt-24">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              {isEmpty ? "Get started with a CV" : "Your CVs"}
+            </h2>
+            {!isEmpty && (
+              <Button
+                onClick={() => handleCreate("classic")}
+                size="sm"
+                disabled={creating}
+              >
+                {creating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+                New CV
+              </Button>
+            )}
+          </div>
 
           {isEmpty ? (
             <div className="mt-5 rounded-2xl border border-dashed border-line-strong bg-surface/60 px-6 py-16 text-center">
@@ -272,5 +375,42 @@ export function DashboardClient({
         </div>
       </Modal>
     </div>
+  );
+}
+
+function QuickAction({
+  icon,
+  label,
+  href,
+  onClick,
+  busy,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  busy?: boolean;
+}) {
+  const inner = (
+    <>
+      <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600 transition-colors group-hover:bg-brand-600 group-hover:text-white">
+        {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : icon}
+      </span>
+      <span className="text-sm font-semibold text-ink">{label}</span>
+    </>
+  );
+  const cls =
+    "group flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-brand-600/40 hover:shadow-card disabled:opacity-60";
+  if (href) {
+    return (
+      <Link href={href} className={cls}>
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} disabled={busy} className={cls}>
+      {inner}
+    </button>
   );
 }

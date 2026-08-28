@@ -18,6 +18,9 @@ model Profile {
   /// Never set when authentication is delegated to Supabase.
   passwordHash String?
   cvs          CV[]
+  coverLetters      CoverLetter[]
+  applications      Application[]
+  applicationEmails ApplicationEmail[]
   exportEvents ExportEvent[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -55,8 +58,78 @@ model CV {
   certifications Certification[]
   languages      Language[]
   exportEvents   ExportEvent[]
+  coverLetters   CoverLetter[]
+  applications   Application[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+
+  @@index([userId])
+}
+
+model CoverLetter {
+  id              String        @id @default(cuid())
+  userId          String
+  user            Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The CV this letter draws its applicant details from (kept if the CV is deleted).
+  cvId            String?
+  cv              CV?           @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  title           String        @default("Untitled cover letter")
+  companyName     String        @default("")
+  jobTitle        String        @default("")
+  hiringManager   String        @default("")
+  companyLocation String        @default("")
+  jobDescription  String        @default("")
+  /// Structured letter body (greeting, opening, body, closing, signature, contact snapshot).
+  content         Json?
+  template        String        @default("classic")
+  applications    Application[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([cvId])
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  userId          String
+  user            Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvId            String?
+  cv              CV?               @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  coverLetterId   String?
+  coverLetter     CoverLetter?      @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+  email           ApplicationEmail?
+  companyName     String            @default("")
+  jobTitle        String            @default("")
+  jobDescription  String            @default("")
+  companyWebsite  String            @default("")
+  jobLocation     String            @default("")
+  applicationDate String            @default("")
+  /// One of: Saved, Preparing, Applied, Interview, Offer, Rejected
+  status          String            @default("Saved")
+  salaryRange     String            @default("")
+  recruiterName   String            @default("")
+  recruiterEmail  String            @default("")
+  jobUrl          String            @default("")
+  notes           String            @default("")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model ApplicationEmail {
+  id            String       @id @default(cuid())
+  userId        String
+  user          Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Optional link to an application (unique — one email per application).
+  applicationId String?      @unique
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  subject       String       @default("")
+  content       String       @default("")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@index([userId])
 }

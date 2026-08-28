@@ -2,12 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, LayoutDashboard, LogOut } from "lucide-react";
+import {
+  ChevronDown,
+  LayoutDashboard,
+  LogOut,
+  FileText,
+  Mail,
+  Briefcase,
+} from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { logout } from "@/lib/auth/client";
-import { initials } from "@/lib/utils";
+import { initials, cn } from "@/lib/utils";
 
 export interface HeaderUser {
   name: string | null;
@@ -15,16 +22,26 @@ export interface HeaderUser {
   avatarUrl: string | null;
 }
 
+const NAV_LINKS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard#cvs", label: "My CVs", icon: FileText, match: "/builder" },
+  { href: "/cover-letters", label: "Cover Letters", icon: Mail },
+  { href: "/applications", label: "Applications", icon: Briefcase },
+];
+
 export function AppHeader({
   user,
   backHref,
   center,
+  nav = false,
 }: {
   user: HeaderUser;
   backHref?: string;
   center?: React.ReactNode;
+  nav?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -61,6 +78,30 @@ export function AppHeader({
             >
               ← Dashboard
             </Link>
+          )}
+          {nav && (
+            <nav className="ml-2 hidden items-center gap-1 lg:flex">
+              {NAV_LINKS.map((l) => {
+                const active =
+                  pathname === l.href.split("#")[0] ||
+                  (l.match ? pathname.startsWith(l.match) : false) ||
+                  (l.href !== "/dashboard" && pathname.startsWith(l.href));
+                return (
+                  <Link
+                    key={l.label}
+                    href={l.href}
+                    className={cn(
+                      "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-ink/[0.06] text-ink"
+                        : "text-ink-muted hover:text-ink"
+                    )}
+                  >
+                    {l.label}
+                  </Link>
+                );
+              })}
+            </nav>
           )}
         </div>
 
@@ -134,6 +175,35 @@ export function AppHeader({
           </AnimatePresence>
         </div>
       </div>
+
+      {nav && (
+        <div className="border-t border-line lg:hidden">
+          <nav className="mx-auto flex w-full max-w-[1500px] gap-1 overflow-x-auto px-3 py-2">
+            {NAV_LINKS.map((l) => {
+              const Icon = l.icon;
+              const active =
+                pathname === l.href.split("#")[0] ||
+                (l.match ? pathname.startsWith(l.match) : false) ||
+                (l.href !== "/dashboard" && pathname.startsWith(l.href));
+              return (
+                <Link
+                  key={l.label}
+                  href={l.href}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-ink/[0.06] text-ink"
+                      : "text-ink-muted hover:text-ink"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {l.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

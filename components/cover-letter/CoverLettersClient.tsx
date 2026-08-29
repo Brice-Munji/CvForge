@@ -3,19 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, Plus, Trash2, Loader2, AlertCircle, X, Pencil } from "lucide-react";
+import { Mail, Plus, Trash2, Loader2, AlertCircle, X, Pencil, Sparkles } from "lucide-react";
 import { AppHeader, type HeaderUser } from "@/components/app/AppHeader";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ProBadge } from "@/components/billing/ProBadge";
+import { PremiumUpgradeModal } from "@/components/billing/PremiumUpgradeModal";
 import { relativeTime } from "@/lib/format";
 import type { CoverLetterListItem } from "@/lib/server/cover-letter-service";
 
 export function CoverLettersClient({
   user,
   initial,
+  isPro,
 }: {
   user: HeaderUser;
   initial: CoverLetterListItem[];
+  isPro: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
@@ -23,6 +27,16 @@ export function CoverLettersClient({
   const [deleteTarget, setDeleteTarget] = useState<CoverLetterListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const startCreate = () => {
+    if (!isPro) {
+      setUpgradeOpen(true);
+      return;
+    }
+    setCreating(true);
+    router.push("/cover-letters/new");
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget || deleting) return;
@@ -56,15 +70,7 @@ export function CoverLettersClient({
               Tailored letters for each role, built from your CV.
             </p>
           </div>
-          <Button
-            onClick={() => {
-              setCreating(true);
-              router.push("/cover-letters/new");
-            }}
-            size="lg"
-            className="shrink-0"
-            disabled={creating}
-          >
+          <Button onClick={startCreate} size="lg" className="shrink-0" disabled={creating}>
             {creating ? (
               <Loader2 className="h-[18px] w-[18px] animate-spin" />
             ) : (
@@ -91,16 +97,27 @@ export function CoverLettersClient({
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-600">
               <Mail className="h-7 w-7" strokeWidth={1.8} />
             </div>
-            <h2 className="mt-5 font-display text-2xl font-extrabold text-ink">
-              No cover letters yet.
-            </h2>
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <h2 className="font-display text-2xl font-extrabold text-ink">
+                {isPro ? "No cover letters yet." : "Cover letters"}
+              </h2>
+              {!isPro && <ProBadge />}
+            </div>
             <p className="mx-auto mt-2 max-w-sm text-ink-muted">
-              Create a tailored cover letter for your next application.
+              {isPro
+                ? "Create a tailored cover letter for your next application."
+                : "Create tailored professional cover letters that reuse your CV — a CVForge Pro feature."}
             </p>
             <div className="mt-6 flex justify-center">
-              <Button href="/cover-letters/new" size="lg">
-                <Plus className="h-[18px] w-[18px]" /> Create Cover Letter
-              </Button>
+              {isPro ? (
+                <Button href="/cover-letters/new" size="lg">
+                  <Plus className="h-[18px] w-[18px]" /> Create Cover Letter
+                </Button>
+              ) : (
+                <Button href="/pricing" size="lg">
+                  <Sparkles className="h-[18px] w-[18px]" /> Upgrade to unlock
+                </Button>
+              )}
             </div>
           </div>
         ) : (
@@ -204,6 +221,13 @@ export function CoverLettersClient({
           </Button>
         </div>
       </Modal>
+
+      <PremiumUpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        title="Cover letters are part of CVForge Pro"
+        message="Create tailored professional cover letters that reuse your CV details."
+      />
     </div>
   );
 }

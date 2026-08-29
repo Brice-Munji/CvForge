@@ -37,6 +37,9 @@ export function useExport(opts: {
     setError(null);
   }, []);
 
+  const [upgrade, setUpgrade] = useState<string | null>(null);
+  const clearUpgrade = useCallback(() => setUpgrade(null), []);
+
   const download = useCallback(async () => {
     if (busy.current) return;
 
@@ -58,14 +61,20 @@ export function useExport(opts: {
       setStatus("preparing");
       const res = await fetch(`/api/cv/${cvId}/export`, { method: "POST" });
       if (!res.ok) {
-        let msg = GENERIC_ERROR;
+        let body: { error?: string; code?: string } = {};
         try {
-          const body = await res.json();
-          if (body?.error) msg = body.error;
+          body = await res.json();
         } catch {
           /* ignore */
         }
-        throw new Error(msg);
+        // A premium limit/lock — surface the upgrade prompt, not an error modal.
+        if (res.status === 403 && body.code === "UPGRADE_REQUIRED") {
+          setUpgrade(body.error || "This is a CVForge Pro feature.");
+          setStatus("idle");
+          busy.current = false;
+          return;
+        }
+        throw new Error(body.error || GENERIC_ERROR);
       }
 
       const blob = await res.blob();
@@ -79,5 +88,5 @@ export function useExport(opts: {
     }
   }, [cvId, getData, flushSave]);
 
-  return { status, error, download, reset };
+  return { status, error, download, reset, upgrade, clearUpgrade };
 }

@@ -76,3 +76,24 @@ create policy "own applications" on "Application"
 create policy "own application emails" on "ApplicationEmail"
   for all using (auth.uid()::text = "userId")
   with check (auth.uid()::text = "userId");
+
+-- ─────────────────────────────────────────────────────────────
+-- Sprint 5 billing tables (server-written via Prisma; these policies protect
+-- any direct client reads with the anon/authenticated role).
+-- ─────────────────────────────────────────────────────────────
+
+alter table "Subscription" enable row level security;
+alter table "Payment"      enable row level security;
+alter table "Usage"        enable row level security;
+
+create policy "own subscription" on "Subscription"
+  for all using (auth.uid()::text = "userId")
+  with check (auth.uid()::text = "userId");
+
+create policy "own payments" on "Payment"
+  for all using (auth.uid()::text = "userId")
+  with check (auth.uid()::text = "userId");
+
+create policy "own usage" on "Usage"
+  for all using (auth.uid()::text = "userId")
+  with check (auth.uid()::text = "userId");

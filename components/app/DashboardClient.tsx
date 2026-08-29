@@ -21,7 +21,10 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { CVCard } from "@/components/app/CVCard";
 import { StatusBadge } from "@/components/app/StatusBadge";
+import { ProBadge } from "@/components/billing/ProBadge";
+import { PremiumUpgradeModal } from "@/components/billing/PremiumUpgradeModal";
 import { relativeTime } from "@/lib/format";
+import type { ViewerPlan } from "@/lib/plan-client";
 import type { CVListItem } from "@/lib/server/cv-service";
 import type { ApplicationListItem } from "@/lib/server/application-service";
 import type { ApplicationStats } from "@/lib/application-types";
@@ -38,11 +41,13 @@ export function DashboardClient({
   initialCVs,
   stats,
   recentApplications,
+  plan,
 }: {
   user: HeaderUser;
   initialCVs: CVListItem[];
   stats: ApplicationStats;
   recentApplications: ApplicationListItem[];
+  plan: ViewerPlan;
 }) {
   const router = useRouter();
   const [cvs, setCvs] = useState<CVListItem[]>(initialCVs);
@@ -51,6 +56,7 @@ export function DashboardClient({
   const [deleteTarget, setDeleteTarget] = useState<CVListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
 
   const firstName = (user.name?.trim() || "").split(" ")[0];
 
@@ -64,7 +70,15 @@ export function DashboardClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ template }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 403 && body.code === "UPGRADE_REQUIRED") {
+          setUpgradeMsg(body.error || "Upgrade to create more CVs.");
+          setCreating(false);
+          return;
+        }
+        throw new Error();
+      }
       const { cv } = await res.json();
       router.push(`/builder/${cv.id}`);
     } catch {
@@ -137,6 +151,29 @@ export function DashboardClient({
           </div>
         )}
 
+        {/* Free-plan usage + upgrade nudge */}
+        {!plan.isPro && (
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <span className="text-sm font-semibold text-ink">Free plan</span>
+              <Usage label="CVs" used={plan.usage.cvCount} max={plan.limits.maxCVs} />
+              <Usage
+                label="PDFs / mo"
+                used={plan.usage.pdfExportCount}
+                max={plan.limits.maxPdfExportsPerPeriod}
+              />
+              <Usage
+                label="Applications"
+                used={plan.usage.applicationCount}
+                max={plan.limits.maxApplications}
+              />
+            </div>
+            <Button href="/pricing" size="sm" className="shrink-0">
+              <Sparkles className="h-4 w-4" /> Upgrade to Pro
+            </Button>
+          </div>
+        )}
+
         {/* Quick actions */}
         <section className="mt-8">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-ink-faint">
@@ -153,6 +190,7 @@ export function DashboardClient({
               icon={<Mail className="h-5 w-5" />}
               label="Write Cover Letter"
               href="/cover-letters/new"
+              pro={!plan.isPro}
             />
             <QuickAction
               icon={<Briefcase className="h-5 w-5" />}
@@ -311,25 +349,35 @@ export function DashboardClient({
             </h2>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            {QUICK_TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => handleCreate(t.id)}
-                disabled={creating}
-                className="group rounded-2xl border border-line bg-surface p-5 text-left transition-all duration-300 hover:-translate-y-1 hover:border-brand-600/40 hover:shadow-card disabled:opacity-60"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-lg font-bold text-ink">
-                    {t.name}
-                  </h3>
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-canvas text-ink-muted transition-colors group-hover:bg-brand-600 group-hover:text-white">
-                    <Plus className="h-4 w-4" />
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-ink-muted">{t.note}</p>
-              </button>
-            ))}
+            {QUICK_TEMPLATES.map((t) => {
+              const locked = !plan.isPro && t.id !== "classic";
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() =>
+                    locked
+                      ? setUpgradeMsg(
+                          "Modern and Minimal templates are part of CVForge Pro."
+                        )
+                      : handleCreate(t.id)
+                  }
+                  disabled={creating}
+                  className="group rounded-2xl border border-line bg-surface p-5 text-left transition-all duration-300 hover:-translate-y-1 hover:border-brand-600/40 hover:shadow-card disabled:opacity-60"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center gap-2 font-display text-lg font-bold text-ink">
+                      {t.name}
+                      {locked && <ProBadge size="xs" />}
+                    </h3>
+                    <span className="grid h-8 w-8 place-items-center rounded-lg bg-canvas text-ink-muted transition-colors group-hover:bg-brand-600 group-hover:text-white">
+                      <Plus className="h-4 w-4" />
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-ink-muted">{t.note}</p>
+                </button>
+              );
+            })}
           </div>
         </section>
       </main>
@@ -374,7 +422,32 @@ export function DashboardClient({
           </Button>
         </div>
       </Modal>
+
+      <PremiumUpgradeModal
+        open={Boolean(upgradeMsg)}
+        onClose={() => setUpgradeMsg(null)}
+        message={upgradeMsg ?? undefined}
+      />
     </div>
+  );
+}
+
+function Usage({
+  label,
+  used,
+  max,
+}: {
+  label: string;
+  used: number;
+  max: number | null;
+}) {
+  return (
+    <span className="text-sm text-ink-muted">
+      {label}:{" "}
+      <span className="font-semibold text-ink">
+        {max === null ? "Unlimited" : `${used} / ${max}`}
+      </span>
+    </span>
   );
 }
 
@@ -384,19 +457,24 @@ function QuickAction({
   href,
   onClick,
   busy,
+  pro,
 }: {
   icon: React.ReactNode;
   label: string;
   href?: string;
   onClick?: () => void;
   busy?: boolean;
+  pro?: boolean;
 }) {
   const inner = (
     <>
       <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600 transition-colors group-hover:bg-brand-600 group-hover:text-white">
         {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : icon}
       </span>
-      <span className="text-sm font-semibold text-ink">{label}</span>
+      <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+        {label}
+        {pro && <ProBadge size="xs" />}
+      </span>
     </>
   );
   const cls =

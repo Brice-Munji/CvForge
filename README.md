@@ -16,12 +16,17 @@ multi-page A4 **PDF export** (server-side with `@react-pdf/renderer`) for all
 three templates, a print-only view, save-before-export, validation, and a
 premium download experience.
 
-**Sprint 4** expands CVForge into a full **job application toolkit**: a cover
+**Sprint 4** expanded CVForge into a full **job application toolkit**: a cover
 letter builder (with its own PDF export), a structured application email
 generator, and an application workspace — a guided create flow, a tracker with
 status management, a real-data funnel/stats, search & filter, and per-user
-history. CVs and cover letters are reused across the flow. Everything persists
-with the same ownership guarantees.
+history. CVs and cover letters are reused across the flow.
+
+**Sprint 5** turns CVForge into a **freemium SaaS**: a Free plan and CVForge
+Pro (2,500 XAF/month or 20,000 XAF/year), a full payment → server-verification
+→ subscription → entitlement pipeline, a centralized plan/entitlement/limit
+system, a pricing page, a billing page (with cancel/resume and payment
+history), and **server-side** premium enforcement on every gated action.
 
 ## Tech stack
 
@@ -202,6 +207,49 @@ horizontal overflow at 375 / 390 / 414 / 768.
 Data model additions: `CoverLetter`, `Application`, `ApplicationEmail` (with
 `ExportEvent` from Sprint 3). RLS policies for all three are in
 `prisma/supabase-rls.sql`. No new environment variables are required.
+
+## Sprint 5 — payments & subscriptions
+
+- **Plans & entitlements** live in `lib/plans.ts` (Free, Pro monthly/yearly —
+  price, currency, interval, features, limits) and `lib/entitlements.ts`
+  (`canAccess(ctx, feature)`). Nothing checks `isPremium` ad-hoc.
+- **Source of truth is the server.** `lib/server/billing.ts#getPlanContext`
+  resolves the effective plan from the `Subscription` row (lazily expiring a
+  past-period subscription) plus live usage counts. Every gated endpoint calls
+  `checkAccess` server-side: CV limit, monthly PDF-export limit, premium
+  templates (Modern/Minimal), cover letters (Pro), application limit. Blocked
+  requests return `403 { code: "UPGRADE_REQUIRED" }` which the UI turns into a
+  polished upgrade modal — never a dead "access denied".
+- **Payment pipeline** (provider-agnostic — `lib/payments/*`): `POST
+  /api/payments/checkout` creates a PENDING `Payment` + provider checkout URL →
+  the user pays → `POST /api/payments/verify` and `POST /api/payments/webhook`
+  both call the idempotent `processTransaction`, which verifies the amount /
+  currency / plan **with the provider** before activating the subscription.
+  Pro is never granted from the browser reaching `/payment/success`. Duplicate
+  webhooks never create duplicate subscriptions/payments (unique
+  `transactionId`, single subscription per user, in-transaction re-checks).
+- **Provider**: a real gateway is used when `PAYMENT_PROVIDER` +
+  `PAYMENT_SECRET_KEY` are set; otherwise a built-in **sandbox** drives the full
+  pipeline locally (a clearly-labelled sandbox checkout page). Secrets are
+  server-only; see `.env.example`.
+- **Pages**: `/pricing` (billing toggle, annual savings), `/settings/billing`
+  (plan, status, dates, cancel-at-period-end / resume, usage, payment history),
+  `/payment/success` (server-verified, with a pending/retry state),
+  `/payment/failed`. Free users see subtle **PRO** badges, template locks, a
+  usage strip, and Pro-feature landings.
+- **Expiration** keeps all CV/application data — it only removes Pro
+  entitlements. Data is never deleted when a subscription lapses.
+- New models: `Subscription`, `Payment`, `Usage` (indexed as required; RLS in
+  `prisma/supabase-rls.sql`).
+
+Verified end-to-end (browser + DB assertions), **24/24** checks: free limits
+(CV / PDF / premium template / cover letter / applications) all blocked with
+upgrade prompts; checkout → sandbox pay → **server verify** → Pro active;
+premium unlocked; billing + history; cancel keeps Pro until period end;
+**idempotent** webhook (1 subscription, 1 successful payment on repeat);
+webhook rejects a bad signature; **expiry removes Pro but keeps data**;
+another user cannot verify your payment or access your CV (404); unauth
+checkout 401. No console errors; no overflow at 375/390/414/768.
 
 ## Sprint 3 status
 

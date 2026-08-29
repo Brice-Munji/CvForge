@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser, jsonError } from "@/lib/server/api";
 import { getOwnedCV, recordExportEvent } from "@/lib/server/cv-service";
+import { checkAccess, upgradeResponse } from "@/lib/server/gate";
+import { syncUsageRow } from "@/lib/server/billing";
 import { renderCvToBuffer } from "@/lib/pdf/render";
 import { validateForExport } from "@/lib/pdf/validate";
 import { cvFileName } from "@/lib/pdf/filename";
@@ -26,9 +28,20 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       );
     }
 
+    // Premium-template gating (Modern/Minimal are Pro).
+    const templateAccess = await checkAccess(auth.id, "PREMIUM_TEMPLATES", {
+      template: cv.data.template,
+    });
+    if (!templateAccess.allowed) return upgradeResponse(templateAccess);
+
+    // Free-plan PDF export limit (per calendar month) — checked before recording.
+    const exportAccess = await checkAccess(auth.id, "PDF_EXPORT");
+    if (!exportAccess.allowed) return upgradeResponse(exportAccess);
+
     const buffer = await renderCvToBuffer(cv.data, { title: cv.title });
 
     await recordExportEvent(auth.id, cv.id, cv.data.template);
+    await syncUsageRow(auth.id);
 
     const filename = cvFileName(cv.data.personal.fullName);
     return new NextResponse(new Uint8Array(buffer), {

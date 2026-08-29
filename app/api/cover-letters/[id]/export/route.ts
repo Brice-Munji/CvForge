@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser, jsonError } from "@/lib/server/api";
 import { getOwnedCoverLetter } from "@/lib/server/cover-letter-service";
+import { checkAccess, upgradeResponse } from "@/lib/server/gate";
 import { renderCoverLetterToBuffer } from "@/lib/pdf/render-cover-letter";
 import { coverLetterFileName } from "@/lib/pdf/filename";
 
@@ -14,6 +15,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   try {
     const cl = await getOwnedCoverLetter(auth.id, params.id);
     if (!cl) return jsonError("Cover letter not found.", 404);
+
+    // Cover letters (incl. their export) are a Pro feature.
+    const access = await checkAccess(auth.id, "COVER_LETTERS");
+    if (!access.allowed) return upgradeResponse(access);
 
     const c = cl.data.content;
     const hasContent =

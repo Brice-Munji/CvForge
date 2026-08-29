@@ -9,6 +9,9 @@ const PROTECTED = [
   "/cover-letters",
   "/applications",
   "/application-email",
+  "/settings",
+  "/checkout",
+  "/payment",
 ];
 const AUTH_PAGES = ["/login", "/signup"];
 
@@ -80,6 +83,9 @@ export const config = {
     "/cover-letters/:path*",
     "/applications/:path*",
     "/application-email/:path*",
+    "/settings/:path*",
+    "/checkout/:path*",
+    "/payment/:path*",
     "/login",
     "/signup",
   ],

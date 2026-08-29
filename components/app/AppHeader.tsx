@@ -11,6 +11,7 @@ import {
   FileText,
   Mail,
   Briefcase,
+  CreditCard,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { logout } from "@/lib/auth/client";
@@ -158,6 +159,15 @@ export function AppHeader({
                   >
                     <LayoutDashboard className="h-4 w-4" />
                     Dashboard
+                  </Link>
+                  <Link
+                    href="/settings/billing"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-ink/[0.04] hover:text-ink"
+                    role="menuitem"
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Plan &amp; Billing
                   </Link>
                   <button
                     type="button"

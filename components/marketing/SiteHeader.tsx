@@ -12,6 +12,7 @@ const NAV = [
   { label: "Templates", href: "/#templates" },
   { label: "How It Works", href: "/#how-it-works" },
   { label: "Features", href: "/#features" },
+  { label: "Pricing", href: "/pricing" },
 ];
 
 export function SiteHeader() {

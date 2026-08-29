@@ -23,6 +23,7 @@ import { Input, Textarea, FieldGroup } from "@/components/ui/Field";
 import { relativeTime } from "@/lib/format";
 import { useCopy } from "@/lib/use-copy";
 import { generateApplicationEmail } from "@/lib/email/template";
+import { PremiumUpgradeModal } from "@/components/billing/PremiumUpgradeModal";
 import { cn } from "@/lib/utils";
 
 export interface WizardCV {
@@ -58,6 +59,7 @@ export function ApplicationWizard({
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
   const { copied, copy } = useCopy();
 
   // Job details
@@ -140,7 +142,15 @@ export function ApplicationWizard({
               : undefined,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 403 && body.code === "UPGRADE_REQUIRED") {
+          setUpgradeMsg(body.error || "Upgrade to track more applications.");
+          setSaving(false);
+          return;
+        }
+        throw new Error();
+      }
       const { application } = await res.json();
       setSavedId(application.id);
     } catch {
@@ -431,6 +441,12 @@ export function ApplicationWizard({
           )}
         </div>
       </main>
+
+      <PremiumUpgradeModal
+        open={Boolean(upgradeMsg)}
+        onClose={() => setUpgradeMsg(null)}
+        message={upgradeMsg ?? undefined}
+      />
     </div>
   );
 }

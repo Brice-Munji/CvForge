@@ -5,6 +5,7 @@ import {
   createCoverLetter,
 } from "@/lib/server/cover-letter-service";
 import { getOwnedCV } from "@/lib/server/cv-service";
+import { checkAccess, upgradeResponse } from "@/lib/server/gate";
 import { buildStarterContent, todayLong } from "@/lib/coverletter-types";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,10 @@ export async function POST(req: Request) {
   const auth = await requireUser();
   if (auth instanceof NextResponse) return auth;
   try {
+    // Cover letters are a Pro feature — enforced server-side.
+    const access = await checkAccess(auth.id, "COVER_LETTERS");
+    if (!access.allowed) return upgradeResponse(access);
+
     const body = await req.json().catch(() => ({}));
     const cvId: string | undefined = body?.cvId || undefined;
 

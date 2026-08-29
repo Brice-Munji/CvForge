@@ -42,6 +42,10 @@ import {
   type PersonalInfo,
 } from "@/lib/cv-types";
 import { isValidEmail } from "@/lib/validation";
+import { isPremiumTemplate } from "@/lib/entitlements";
+import { PremiumUpgradeModal } from "@/components/billing/PremiumUpgradeModal";
+import { ProBadge } from "@/components/billing/ProBadge";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type StepKey =
@@ -78,13 +82,16 @@ export function BuilderClient({
   cvId,
   initialTitle,
   initialData,
+  isPro,
 }: {
   user: HeaderUser;
   cvId: string;
   initialTitle: string;
   initialData: CVData;
+  isPro: boolean;
 }) {
   const router = useRouter();
+  const [templateUpgrade, setTemplateUpgrade] = useState<string | null>(null);
   const [cv, setCv] = useState<CVData>(initialData);
   const [title, setTitle] = useState(initialTitle);
   const [active, setActive] = useState(0);
@@ -198,7 +205,26 @@ export function BuilderClient({
     error: exportError,
     download: downloadPdf,
     reset: resetExport,
+    upgrade: exportUpgrade,
+    clearUpgrade: clearExportUpgrade,
   } = useExport({ cvId, getData: () => cvRef.current, flushSave });
+
+  const upgradeMessage = templateUpgrade || exportUpgrade;
+  const closeUpgrade = () => {
+    setTemplateUpgrade(null);
+    clearExportUpgrade();
+  };
+
+  // Choosing a template: premium templates are gated for Free users.
+  const chooseTemplate = (t: TemplateId) => {
+    if (!isPro && isPremiumTemplate(t)) {
+      setTemplateUpgrade(
+        "Modern and Minimal templates are part of CVForge Pro."
+      );
+      return;
+    }
+    setTemplate(t);
+  };
 
   /* ------------- validation ------------- */
   const errors = useMemo(() => {
@@ -414,21 +440,35 @@ export function BuilderClient({
 
           <div className="ml-auto flex items-center gap-2">
             <div className="hidden rounded-lg border border-line-strong bg-canvas p-0.5 sm:flex">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTemplate(t.id)}
-                  className={cn(
-                    "rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors sm:text-sm",
-                    cv.template === t.id
-                      ? "bg-brand-600 text-white shadow-subtle"
-                      : "text-ink-soft hover:text-ink"
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+              {TEMPLATES.map((t) => {
+                const locked = !isPro && isPremiumTemplate(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => chooseTemplate(t.id)}
+                    aria-label={
+                      locked ? `${t.label} template (Pro)` : `${t.label} template`
+                    }
+                    className={cn(
+                      "flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors sm:text-sm",
+                      cv.template === t.id
+                        ? "bg-brand-600 text-white shadow-subtle"
+                        : "text-ink-soft hover:text-ink"
+                    )}
+                  >
+                    {t.label}
+                    {locked && (
+                      <Lock
+                        className={cn(
+                          "h-3 w-3",
+                          cv.template === t.id ? "text-white/80" : "text-amber-500"
+                        )}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             <DownloadButton
@@ -534,15 +574,19 @@ export function BuilderClient({
           </div>
           <select
             value={cv.template}
-            onChange={(e) => setTemplate(e.target.value as TemplateId)}
+            onChange={(e) => chooseTemplate(e.target.value as TemplateId)}
             aria-label="Template"
             className="rounded-lg border border-line-strong bg-surface px-2.5 py-2 text-sm font-semibold text-ink"
           >
-            {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
+            {TEMPLATES.map((t) => {
+              const locked = !isPro && isPremiumTemplate(t.id);
+              return (
+                <option key={t.id} value={t.id} disabled={locked}>
+                  {t.label}
+                  {locked ? " (Pro)" : ""}
+                </option>
+              );
+            })}
           </select>
           <DownloadButton status={exportStatus} onClick={downloadPdf} compact />
         </div>
@@ -752,6 +796,13 @@ export function BuilderClient({
         error={exportError}
         onClose={resetExport}
         onRetry={downloadPdf}
+      />
+
+      {/* Premium upgrade prompt (template lock or export limit) */}
+      <PremiumUpgradeModal
+        open={Boolean(upgradeMessage)}
+        onClose={closeUpgrade}
+        message={upgradeMessage ?? undefined}
       />
     </div>
   );

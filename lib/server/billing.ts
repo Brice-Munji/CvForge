@@ -106,19 +106,23 @@ export async function getPlanContext(userId: string): Promise<PlanContext> {
   let status: SubStatus = (sub?.status as SubStatus) ?? "INACTIVE";
 
   if (sub && isPaidPlan(sub.plan)) {
-    const periodValid = sub.currentPeriodEnd
-      ? sub.currentPeriodEnd > now
-      : false;
     const activeish = status === "ACTIVE" || status === "TRIALING";
-
-    if (activeish && periodValid) {
-      planId = sub.plan as PlanId;
-    } else if (sub.currentPeriodEnd && !periodValid && status !== "EXPIRED") {
-      // Paid period has ended and wasn't renewed — expire (data is never deleted).
-      await prisma.subscription
-        .update({ where: { userId }, data: { status: "EXPIRED" } })
-        .catch(() => {});
-      status = "EXPIRED";
+    // Admin-granted Pro never expires by period; it ends only on revoke.
+    if (sub.grantType === "admin") {
+      if (activeish) planId = sub.plan as PlanId;
+    } else {
+      const periodValid = sub.currentPeriodEnd
+        ? sub.currentPeriodEnd > now
+        : false;
+      if (activeish && periodValid) {
+        planId = sub.plan as PlanId;
+      } else if (sub.currentPeriodEnd && !periodValid && status !== "EXPIRED") {
+        // Paid period has ended and wasn't renewed — expire (data is never deleted).
+        await prisma.subscription
+          .update({ where: { userId }, data: { status: "EXPIRED" } })
+          .catch(() => {});
+        status = "EXPIRED";
+      }
     }
   }
 

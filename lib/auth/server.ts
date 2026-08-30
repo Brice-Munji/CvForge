@@ -1,7 +1,11 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { SESSION_COOKIE, supabaseEnabled } from "./config";
+import {
+  SESSION_COOKIE,
+  supabaseEnabled,
+  isBootstrapAdminEmail,
+} from "./config";
 import { createSessionToken, verifySessionToken } from "./session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -10,6 +14,44 @@ export interface AuthUser {
   email: string;
   name: string | null;
   avatarUrl: string | null;
+  role: string;
+  disabled: boolean;
+}
+
+type ProfileRow = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  role: string;
+  disabled: boolean;
+};
+
+/** Promote configured bootstrap-admin emails to the ADMIN role (once). */
+async function withAdminBootstrap(p: ProfileRow): Promise<ProfileRow> {
+  if (p.role !== "ADMIN" && isBootstrapAdminEmail(p.email)) {
+    try {
+      await prisma.profile.update({
+        where: { id: p.id },
+        data: { role: "ADMIN" },
+      });
+      return { ...p, role: "ADMIN" };
+    } catch {
+      /* ignore */
+    }
+  }
+  return p;
+}
+
+function toAuthUser(p: ProfileRow): AuthUser {
+  return {
+    id: p.id,
+    email: p.email,
+    name: p.name,
+    avatarUrl: p.avatarUrl,
+    role: p.role,
+    disabled: p.disabled,
+  };
 }
 
 /**
@@ -26,7 +68,6 @@ async function ensureProfile(input: {
     where: { id: input.id },
     update: {
       email: input.email,
-      // Only fill name/avatar if we have them and they aren't already set.
       ...(input.name ? { name: input.name } : {}),
       ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
     },
@@ -37,12 +78,7 @@ async function ensureProfile(input: {
       avatarUrl: input.avatarUrl ?? null,
     },
   });
-  return {
-    id: profile.id,
-    email: profile.email,
-    name: profile.name,
-    avatarUrl: profile.avatarUrl,
-  };
+  return toAuthUser(await withAdminBootstrap(profile));
 }
 
 /**
@@ -73,12 +109,14 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   if (!uid) return null;
   const profile = await prisma.profile.findUnique({ where: { id: uid } });
   if (!profile) return null;
-  return {
-    id: profile.id,
-    email: profile.email,
-    name: profile.name,
-    avatarUrl: profile.avatarUrl,
-  };
+  return toAuthUser(await withAdminBootstrap(profile));
+}
+
+/** True when the authenticated user has the ADMIN role. */
+export async function getAdminUser(): Promise<AuthUser | null> {
+  const user = await getAuthUser();
+  if (!user || user.role !== "ADMIN") return null;
+  return user;
 }
 
 /** Set the local session cookie for a profile id (local provider only). */

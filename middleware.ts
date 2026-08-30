@@ -12,6 +12,7 @@ const PROTECTED = [
   "/settings",
   "/checkout",
   "/payment",
+  "/admin",
 ];
 const AUTH_PAGES = ["/login", "/signup"];
 
@@ -86,6 +87,7 @@ export const config = {
     "/settings/:path*",
     "/checkout/:path*",
     "/payment/:path*",
+    "/admin/:path*",
     "/login",
     "/signup",
   ],

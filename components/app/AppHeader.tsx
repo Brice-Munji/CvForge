@@ -12,6 +12,7 @@ import {
   Mail,
   Briefcase,
   CreditCard,
+  ShieldCheck,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { logout } from "@/lib/auth/client";
@@ -35,11 +36,13 @@ export function AppHeader({
   backHref,
   center,
   nav = false,
+  isAdmin = false,
 }: {
   user: HeaderUser;
   backHref?: string;
   center?: React.ReactNode;
   nav?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -169,6 +172,17 @@ export function AppHeader({
                     <CreditCard className="h-4 w-4" />
                     Plan &amp; Billing
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
+                      role="menuitem"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      Admin dashboard
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={handleLogout}

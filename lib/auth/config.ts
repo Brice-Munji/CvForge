@@ -22,6 +22,22 @@ export function supabaseEnabled(): boolean {
 
 export const SESSION_COOKIE = "cvforge_session";
 
+/**
+ * Emails that should be treated as platform administrators. Configured via the
+ * ADMIN_EMAILS env var (comma-separated). A matching account is promoted to the
+ * ADMIN role in the database on login — the DB role remains the source of truth.
+ */
+export function adminEmails(): string[] {
+  return (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isBootstrapAdminEmail(email: string): boolean {
+  return adminEmails().includes(email.trim().toLowerCase());
+}
+
 export function sessionSecret(): string {
   return (
     process.env.SESSION_SECRET ||

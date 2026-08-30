@@ -17,6 +17,10 @@ model Profile {
   /// Only set when using the built-in local auth provider (scrypt hash).
   /// Never set when authentication is delegated to Supabase.
   passwordHash String?
+  /// USER | ADMIN — authorization is always checked server-side against this.
+  role         String        @default("USER")
+  /// A disabled account keeps all its data but cannot use protected features.
+  disabled     Boolean       @default(false)
   cvs          CV[]
   coverLetters      CoverLetter[]
   applications      Application[]
@@ -25,8 +29,33 @@ model Profile {
   subscription Subscription?
   payments     Payment[]
   usages       Usage[]
+  adminActions AdminAuditLog[] @relation("AdminActions")
+  targetedBy   AdminAuditLog[] @relation("AuditTargets")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+
+  @@index([role])
+  @@index([createdAt])
+  @@index([disabled])
+}
+
+/// Immutable trail of sensitive admin actions.
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  admin        Profile  @relation("AdminActions", fields: [adminId], references: [id], onDelete: Cascade)
+  /// e.g. GRANT_PRO | REVOKE_PRO | CHANGE_ROLE | DISABLE_USER | ENABLE_USER
+  action       String
+  targetUserId String?
+  target       Profile? @relation("AuditTargets", fields: [targetUserId], references: [id], onDelete: SetNull)
+  /// Non-sensitive context only (reason, from/to values). Never secrets.
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([createdAt])
+  @@index([action])
 }
 
 /// A user's current subscription (one per user). Payment rows are the history.
@@ -45,12 +74,18 @@ model Subscription {
   currentPeriodStart     DateTime?
   currentPeriodEnd       DateTime?
   cancelAtPeriodEnd      Boolean   @default(false)
+  /// "paid" (real payment) | "admin" (manually granted by an administrator)
+  grantType              String    @default("paid")
+  grantedByAdminId       String?
+  grantReason            String?
   payments               Payment[]
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
   @@index([status])
   @@index([providerSubscriptionId])
+  @@index([createdAt])
+  @@index([grantType])
 }
 
 model Payment {
@@ -77,6 +112,7 @@ model Payment {
   @@index([userId])
   @@index([status])
   @@index([transactionId])
+  @@index([createdAt])
 }
 
 /// Per-period usage counters (foundation for monthly resets & analytics).
@@ -135,6 +171,8 @@ model CV {
   updatedAt      DateTime        @updatedAt
 
   @@index([userId])
+  @@index([createdAt])
+  @@index([updatedAt])
 }
 
 model CoverLetter {
@@ -188,6 +226,7 @@ model Application {
 
   @@index([userId])
   @@index([status])
+  @@index([createdAt])
 }
 
 model ApplicationEmail {

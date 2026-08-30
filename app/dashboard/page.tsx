@@ -33,6 +33,7 @@ export default async function DashboardPage() {
         usage: plan.usage,
         limits: plan.limits,
       }}
+      isAdmin={user.role === "ADMIN"}
     />
   );
 }

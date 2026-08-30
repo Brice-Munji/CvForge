@@ -42,12 +42,14 @@ export function DashboardClient({
   stats,
   recentApplications,
   plan,
+  isAdmin = false,
 }: {
   user: HeaderUser;
   initialCVs: CVListItem[];
   stats: ApplicationStats;
   recentApplications: ApplicationListItem[];
   plan: ViewerPlan;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [cvs, setCvs] = useState<CVListItem[]>(initialCVs);
@@ -125,7 +127,7 @@ export function DashboardClient({
 
   return (
     <div className="min-h-screen bg-canvas">
-      <AppHeader user={user} nav />
+      <AppHeader user={user} nav isAdmin={isAdmin} />
 
       <main className="mx-auto w-full max-w-content px-5 py-10 sm:px-8 sm:py-14">
         <div>

@@ -97,3 +97,11 @@ create policy "own payments" on "Payment"
 create policy "own usage" on "Usage"
   for all using (auth.uid()::text = "userId")
   with check (auth.uid()::text = "userId");
+
+-- ─────────────────────────────────────────────────────────────
+-- Sprint 7 admin audit log — locked to server access only.
+-- RLS enabled with NO policy => no anon/authenticated client can read or write
+-- it. Admin reads happen server-side via Prisma (privileged connection).
+-- ─────────────────────────────────────────────────────────────
+
+alter table "AdminAuditLog" enable row level security;

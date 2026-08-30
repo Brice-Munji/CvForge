@@ -22,11 +22,17 @@ generator, and an application workspace — a guided create flow, a tracker with
 status management, a real-data funnel/stats, search & filter, and per-user
 history. CVs and cover letters are reused across the flow.
 
-**Sprint 5** turns CVForge into a **freemium SaaS**: a Free plan and CVForge
+**Sprint 5** turned CVForge into a **freemium SaaS**: a Free plan and CVForge
 Pro (2,500 XAF/month or 20,000 XAF/year), a full payment → server-verification
 → subscription → entitlement pipeline, a centralized plan/entitlement/limit
 system, a pricing page, a billing page (with cancel/resume and payment
 history), and **server-side** premium enforcement on every gated action.
+
+**Sprint 7** adds the **admin control center** at `/admin`: real-data platform
+analytics (users, revenue, CVs, applications, subscriptions), paginated
+management of users/CVs/applications/subscriptions/payments, manual Pro
+grant/revoke, role changes and account disable/enable — every action authorized
+server-side against the `ADMIN` role and recorded in an immutable audit log.
 
 ## Tech stack
 
@@ -207,6 +213,42 @@ horizontal overflow at 375 / 390 / 414 / 768.
 Data model additions: `CoverLetter`, `Application`, `ApplicationEmail` (with
 `ExportEvent` from Sprint 3). RLS policies for all three are in
 `prisma/supabase-rls.sql`. No new environment variables are required.
+
+## Sprint 7 — admin dashboard
+
+- **Access** is gated by the `ADMIN` role stored in the DB (source of truth).
+  Configure bootstrap admins via `ADMIN_EMAILS` (comma-separated) — matching
+  accounts are promoted on login. Admins can also grant/revoke the role from a
+  user's detail page. `/admin` pages check the role in the server layout;
+  `/api/admin/*` routes call `requireAdmin()`. Non-admins are redirected (pages)
+  or receive **403** (APIs); disabled accounts are blocked by `requireUser()`.
+- **Overview** (`/admin`): headline stats (users, Pro users, CVs, applications,
+  verified revenue, PDF downloads), user-growth & revenue charts, user/revenue/
+  subscription/CV/application stat groups, system health, and a real recent-
+  activity feed — all from live `COUNT`/`GROUP BY`/date-filtered queries.
+- **Management** (paginated, searchable, filterable, server-side): `/admin/users`
+  (+ `/admin/users/[id]` detail), `/admin/cvs`, `/admin/applications`,
+  `/admin/subscriptions`, `/admin/payments`, `/admin/analytics` (7d/30d/90d/12m
+  ranges via SQL `date_trunc`), `/admin/settings`. CSV export for users,
+  payments and subscriptions (never any secret).
+- **Actions**: grant Pro (an **administrative entitlement**, `grantType="admin"`
+  — never a fake payment; it doesn't expire until revoked), revoke Pro, change
+  role, disable/enable account. Each writes an `AdminAuditLog` row
+  (`GRANT_PRO`/`REVOKE_PRO`/`CHANGE_ROLE`/`DISABLE_USER`/`ENABLE_USER`) with a
+  reason. Admins can't demote or disable themselves. Revenue only ever counts
+  `SUCCESS` payments. No passwords/tokens/secrets are ever queried or shown.
+- New: `role` + `disabled` on `Profile`, `AdminAuditLog`, and
+  `grantType`/`grantedByAdminId`/`grantReason` on `Subscription`, with the
+  admin-relevant indexes. Migration + RLS included.
+
+Verified end-to-end (browser + DB assertions), **19/19** (one line was an
+`innerText`-uppercase test artifact, confirmed in screenshots): normal user is
+denied `/admin` (redirect) and admin APIs (403); admin dashboard loads with
+stats matching the DB and updating as data is created; successful payments
+raise revenue while failed ones don't; grant/revoke Pro flips entitlements and
+writes audit rows; role change toggles admin access; disable blocks then enable
+restores; filters/pagination work; IDOR/privilege-escalation blocked; no
+secrets exposed; no overflow at 768/1024/1280/1440 and mobile.
 
 ## Sprint 5 — payments & subscriptions
 

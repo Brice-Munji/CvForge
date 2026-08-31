@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A user profile. `id` mirrors the Supabase auth user id (uuid) in production,
+/// or a generated id when using the built-in local auth provider.
+model Profile {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  avatarUrl    String?
+  /// Only set when using the built-in local auth provider (scrypt hash).
+  /// Never set when authentication is delegated to Supabase.
+  passwordHash String?
+  /// USER | ADMIN — authorization is always checked server-side against this.
+  role         String        @default("USER")
+  /// A disabled account keeps all its data but cannot use protected features.
+  disabled     Boolean       @default(false)
+  cvs          CV[]
+  coverLetters      CoverLetter[]
+  applications      Application[]
+  applicationEmails ApplicationEmail[]
+  exportEvents ExportEvent[]
+  subscription Subscription?
+  payments     Payment[]
+  usages       Usage[]
+  adminActions AdminAuditLog[] @relation("AdminActions")
+  targetedBy   AdminAuditLog[] @relation("AuditTargets")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([role])
+  @@index([createdAt])
+  @@index([disabled])
+}
+
+/// Immutable trail of sensitive admin actions.
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  adminId      String
+  admin        Profile  @relation("AdminActions", fields: [adminId], references: [id], onDelete: Cascade)
+  /// e.g. GRANT_PRO | REVOKE_PRO | CHANGE_ROLE | DISABLE_USER | ENABLE_USER
+  action       String
+  targetUserId String?
+  target       Profile? @relation("AuditTargets", fields: [targetUserId], references: [id], onDelete: SetNull)
+  /// Non-sensitive context only (reason, from/to values). Never secrets.
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetUserId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+/// A user's current subscription (one per user). Payment rows are the history.
+model Subscription {
+  id                     String    @id @default(cuid())
+  userId                 String    @unique
+  user                   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Plan id: "free" | "pro_monthly" | "pro_yearly"
+  plan                   String    @default("free")
+  /// Internal status: ACTIVE | TRIALING | PAST_DUE | CANCELED | EXPIRED | INACTIVE
+  status                 String    @default("INACTIVE")
+  provider               String    @default("")
+  providerCustomerId     String    @default("")
+  providerSubscriptionId String?   @unique
+  startDate              DateTime?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  /// "paid" (real payment) | "admin" (manually granted by an administrator)
+  grantType              String    @default("paid")
+  grantedByAdminId       String?
+  grantReason            String?
+  payments               Payment[]
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([status])
+  @@index([providerSubscriptionId])
+  @@index([createdAt])
+  @@index([grantType])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  userId                String
+  user                  Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId        String?
+  subscription          Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  provider              String        @default("")
+  /// Our unique payment reference (idempotency key).
+  transactionId         String        @unique
+  /// The provider's own transaction id (filled after verification).
+  providerTransactionId String        @default("")
+  amount                Int           @default(0)
+  currency              String        @default("XAF")
+  /// PENDING | SUCCESS | FAILED
+  status                String        @default("PENDING")
+  plan                  String        @default("")
+  paymentType           String        @default("subscription")
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([transactionId])
+  @@index([createdAt])
+}
+
+/// Per-period usage counters (foundation for monthly resets & analytics).
+model Usage {
+  id               String   @id @default(cuid())
+  userId           String
+  user             Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  periodStart      DateTime
+  periodEnd        DateTime
+  cvCount          Int      @default(0)
+  pdfExportCount   Int      @default(0)
+  applicationCount Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, periodStart])
+  @@index([userId])
+  @@index([periodStart])
+}
+
+/// Lightweight event log — foundation for later download analytics / limits.
+model ExportEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvId      String?
+  cv        CV?      @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  template  String   @default("classic")
+  /// e.g. "PDF_DOWNLOAD"
+  type      String   @default("PDF_DOWNLOAD")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([cvId])
+}
+
+model CV {
+  id             String          @id @default(cuid())
+  userId         String
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String          @default("My CV")
+  template       String          @default("classic")
+  /// Contact block: fullName, title, email, phone, location, linkedin, portfolio
+  personalInfo   Json?
+  summary        String?
+  experiences    Experience[]
+  educations     Education[]
+  skills         Skill[]
+  projects       Project[]
+  certifications Certification[]
+  languages      Language[]
+  exportEvents   ExportEvent[]
+  coverLetters   CoverLetter[]
+  applications   Application[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model CoverLetter {
+  id              String        @id @default(cuid())
+  userId          String
+  user            Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The CV this letter draws its applicant details from (kept if the CV is deleted).
+  cvId            String?
+  cv              CV?           @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  title           String        @default("Untitled cover letter")
+  companyName     String        @default("")
+  jobTitle        String        @default("")
+  hiringManager   String        @default("")
+  companyLocation String        @default("")
+  jobDescription  String        @default("")
+  /// Structured letter body (greeting, opening, body, closing, signature, contact snapshot).
+  content         Json?
+  template        String        @default("classic")
+  applications    Application[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([cvId])
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  userId          String
+  user            Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cvId            String?
+  cv              CV?               @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  coverLetterId   String?
+  coverLetter     CoverLetter?      @relation(fields: [coverLetterId], references: [id], onDelete: SetNull)
+  email           ApplicationEmail?
+  companyName     String            @default("")
+  jobTitle        String            @default("")
+  jobDescription  String            @default("")
+  companyWebsite  String            @default("")
+  jobLocation     String            @default("")
+  applicationDate String            @default("")
+  /// One of: Saved, Preparing, Applied, Interview, Offer, Rejected
+  status          String            @default("Saved")
+  salaryRange     String            @default("")
+  recruiterName   String            @default("")
+  recruiterEmail  String            @default("")
+  jobUrl          String            @default("")
+  notes           String            @default("")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ApplicationEmail {
+  id            String       @id @default(cuid())
+  userId        String
+  user          Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Optional link to an application (unique — one email per application).
+  applicationId String?      @unique
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  subject       String       @default("")
+  content       String       @default("")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model Experience {
+  id          String  @id @default(cuid())
+  cvId        String
+  cv          CV      @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  company     String  @default("")
+  position    String  @default("")
+  location    String  @default("")
+  startDate   String  @default("")
+  endDate     String  @default("")
+  current     Boolean @default(false)
+  description String  @default("")
+  order       Int     @default(0)
+
+  @@index([cvId])
+}
+
+model Education {
+  id          String @id @default(cuid())
+  cvId        String
+  cv          CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  institution String @default("")
+  degree      String @default("")
+  field       String @default("")
+  startDate   String @default("")
+  endDate     String @default("")
+  description String @default("")
+  order       Int    @default(0)
+
+  @@index([cvId])
+}
+
+model Skill {
+  id    String @id @default(cuid())
+  cvId  String
+  cv    CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name  String @default("")
+  level String @default("Intermediate")
+  order Int    @default(0)
+
+  @@index([cvId])
+}
+
+model Project {
+  id           String   @id @default(cuid())
+  cvId         String
+  cv           CV       @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name         String   @default("")
+  description  String   @default("")
+  technologies String[] @default([])
+  url          String   @default("")
+  order        Int      @default(0)
+
+  @@index([cvId])
+}
+
+model Certification {
+  id     String @id @default(cuid())
+  cvId   String
+  cv     CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name   String @default("")
+  issuer String @default("")
+  date   String @default("")
+  url    String @default("")
+  order  Int    @default(0)
+
+  @@index([cvId])
+}
+
+model Language {
+  id    String @id @default(cuid())
+  cvId  String
+  cv    CV     @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  name  String @default("")
+  level String @default("Conversational")
+  order Int    @default(0)
+
+  @@index([cvId])
+}

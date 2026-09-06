@@ -14,6 +14,7 @@ import {
   Trash2,
   Mail,
   Briefcase,
+  ScanSearch,
   ArrowRight,
 } from "lucide-react";
 import { AppHeader, type HeaderUser } from "@/components/app/AppHeader";
@@ -181,12 +182,17 @@ export function DashboardClient({
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-ink-faint">
             Quick actions
           </h2>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <QuickAction
               icon={<FileText className="h-5 w-5" />}
               label="Create CV"
               onClick={() => handleCreate("classic")}
               busy={creating}
+            />
+            <QuickAction
+              icon={<ScanSearch className="h-5 w-5" />}
+              label="Check My CV"
+              href="/ats"
             />
             <QuickAction
               icon={<Mail className="h-5 w-5" />}

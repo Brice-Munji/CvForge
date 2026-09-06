@@ -226,7 +226,13 @@ function rangeConfig(range: SeriesRange): { since: Date; unit: "day" | "month" }
 }
 
 async function bucketed(
-  table: '"Profile"' | '"CV"' | '"Application"' | '"Payment"' | '"Subscription"',
+  table:
+    | '"Profile"'
+    | '"CV"'
+    | '"Application"'
+    | '"Payment"'
+    | '"Subscription"'
+    | '"AtsAnalysis"',
   range: SeriesRange,
   extraWhere = "",
   valueExpr = "count(*)::int"
@@ -246,7 +252,7 @@ async function bucketed(
 }
 
 export async function getSeries(
-  kind: "users" | "revenue" | "cvs" | "applications" | "subscriptions",
+  kind: "users" | "revenue" | "cvs" | "applications" | "subscriptions" | "ats",
   range: SeriesRange
 ): Promise<SeriesPoint[]> {
   switch (kind) {
@@ -260,6 +266,8 @@ export async function getSeries(
       return bucketed('"Payment"', range, `and status = 'SUCCESS'`, "sum(amount)::int");
     case "subscriptions":
       return bucketed('"Subscription"', range);
+    case "ats":
+      return bucketed('"AtsAnalysis"', range);
     default:
       return [];
   }

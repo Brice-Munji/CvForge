@@ -1,4 +1,3 @@
-import { Sparkles } from "lucide-react";
 import { getSeries, getCVStats, type SeriesRange } from "@/lib/server/admin";
 import { Card, PageHeader } from "@/components/admin/ui";
 import { SeriesChart } from "@/components/admin/Chart";
@@ -17,13 +16,14 @@ export default async function AdminAnalyticsPage({
     ? searchParams.range
     : "30d") as SeriesRange;
 
-  const [users, revenue, cvs, applications, subscriptions, cvStats] =
+  const [users, revenue, cvs, applications, subscriptions, ats, cvStats] =
     await Promise.all([
       getSeries("users", range),
       getSeries("revenue", range),
       getSeries("cvs", range),
       getSeries("applications", range),
       getSeries("subscriptions", range),
+      getSeries("ats", range),
       getCVStats(),
     ]);
 
@@ -78,13 +78,8 @@ export default async function AdminAnalyticsPage({
       </div>
 
       <div className="mt-4">
-        <Card title="AI analytics">
-          <div className="flex items-center gap-3 rounded-xl border border-dashed border-line-strong bg-canvas/40 px-5 py-8 text-center">
-            <div className="mx-auto flex items-center gap-3 text-ink-muted">
-              <Sparkles className="h-5 w-5 text-brand-500" />
-              AI analytics will appear once AI features are enabled.
-            </div>
-          </div>
+        <Card title="ATS checks">
+          <SeriesChart points={ats} />
         </Card>
       </div>
     </div>

@@ -16,6 +16,7 @@ export interface UsageCounts {
   cvCount: number;
   pdfExportCount: number;
   applicationCount: number;
+  atsAnalysisCount: number;
 }
 
 export interface EntitlementContext {
@@ -47,12 +48,14 @@ export function planHasFeature(planId: PlanId, feature: Feature): boolean {
       return l.maxApplications === null;
     case "CREATE_MULTIPLE_CVS":
       return l.maxCVs === null || l.maxCVs > 1;
+    case "ATS_ANALYZER":
+      // Available on all plans; free has a monthly limit, Pro is unlimited.
+      return l.maxAtsAnalysesPerPeriod === null || l.maxAtsAnalysesPerPeriod > 0;
     case "PDF_EXPORT":
     case "APPLICATION_EMAILS":
       return true; // available on all plans (free has a monthly limit for PDF)
     case "AI_ASSISTANT":
-    case "ATS_ANALYZER":
-      return false; // reserved for a future sprint (Pro will unlock)
+      return false; // AI writing/improvement is intentionally not offered
     default:
       return false;
   }
@@ -125,6 +128,18 @@ export function canAccess(
         reason: "upgrade",
         feature,
         message: "Cover letters are part of CVForge Pro.",
+      };
+    }
+    case "ATS_ANALYZER": {
+      if (l.maxAtsAnalysesPerPeriod === null) return { allowed: true };
+      if (ctx.usage.atsAnalysisCount < l.maxAtsAnalysesPerPeriod)
+        return { allowed: true };
+      return {
+        allowed: false,
+        reason: "limit",
+        feature,
+        message:
+          "You've used all your free ATS checks this month. Upgrade to CVForge Pro for unlimited checks.",
       };
     }
     default:

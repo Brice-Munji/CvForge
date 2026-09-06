@@ -26,6 +26,7 @@ model Profile {
   applications      Application[]
   applicationEmails ApplicationEmail[]
   exportEvents ExportEvent[]
+  atsAnalyses  AtsAnalysis[]
   subscription Subscription?
   payments     Payment[]
   usages       Usage[]
@@ -125,6 +126,7 @@ model Usage {
   cvCount          Int      @default(0)
   pdfExportCount   Int      @default(0)
   applicationCount Int      @default(0)
+  atsAnalysisCount Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -149,6 +151,31 @@ model ExportEvent {
   @@index([cvId])
 }
 
+/// A saved, deterministic ATS analysis. Owned by exactly one user; access is
+/// always scoped to `userId` server-side so users only see their own analyses.
+model AtsAnalysis {
+  id             String   @id @default(cuid())
+  userId         String
+  user           Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The CV that was analyzed (kept if the CV is later deleted).
+  cvId           String?
+  cv             CV?      @relation(fields: [cvId], references: [id], onDelete: SetNull)
+  /// "CV" (general check) | "JOB" (matched against a job description)
+  mode           String   @default("CV")
+  title          String   @default("CV Check")
+  jobTitle       String   @default("")
+  jobDescription String   @default("")
+  /// The CVForge Match Score, 0–100. An estimate, never a guarantee.
+  score          Int      @default(0)
+  /// Full AtsResult breakdown (strengths, weaknesses, keywords, recommendations).
+  result         Json
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([cvId])
+  @@index([createdAt])
+}
+
 model CV {
   id             String          @id @default(cuid())
   userId         String
@@ -165,6 +192,7 @@ model CV {
   certifications Certification[]
   languages      Language[]
   exportEvents   ExportEvent[]
+  atsAnalyses    AtsAnalysis[]
   coverLetters   CoverLetter[]
   applications   Application[]
   createdAt      DateTime        @default(now())

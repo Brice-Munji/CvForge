@@ -11,6 +11,7 @@ import {
   FileText,
   Mail,
   Briefcase,
+  ScanSearch,
   CreditCard,
   ShieldCheck,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const NAV_LINKS = [
   { href: "/dashboard#cvs", label: "My CVs", icon: FileText, match: "/builder" },
   { href: "/cover-letters", label: "Cover Letters", icon: Mail },
   { href: "/applications", label: "Applications", icon: Briefcase },
+  { href: "/ats", label: "ATS Check", icon: ScanSearch },
 ];
 
 export function AppHeader({

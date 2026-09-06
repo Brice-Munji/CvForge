@@ -11,4 +11,5 @@ yarn-debug.log*
 yarn-error.log*
 next-env.d.ts
 /coverage
+*.tsbuildinfo
 .vercel

@@ -1,6 +1,6 @@
 import { Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import type { CVData } from "@/lib/cv-types";
-import { pdfDate, contactList, PdfFlags, SKILL_PCT } from "./pdf-utils";
+import { pdfDate, contactList, PdfFlags, SKILL_PCT, ENTRY_KEEP } from "./pdf-utils";
 
 const GREEN = "#0A4531";
 const GREEN_MID = "#0E6B49";
@@ -99,14 +99,16 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
         {f.experience ? (
           <Section title="Experience">
             {data.experiences.map((e) => (
-              <View key={e.id} style={s.entry} wrap={false}>
-                <View style={s.rowBetween}>
-                  <Text style={s.entryTitle}>{e.position || "Position"}</Text>
-                  <Text style={s.dates}>{pdfDate(e.startDate, e.endDate, e.current)}</Text>
+              <View key={e.id} style={s.entry} minPresenceAhead={ENTRY_KEEP}>
+                <View wrap={false}>
+                  <View style={s.rowBetween}>
+                    <Text style={s.entryTitle}>{e.position || "Position"}</Text>
+                    <Text style={s.dates}>{pdfDate(e.startDate, e.endDate, e.current)}</Text>
+                  </View>
+                  <Text style={s.entryOrg}>
+                    {[e.company, e.location].filter(Boolean).join("  ·  ") || "Company"}
+                  </Text>
                 </View>
-                <Text style={s.entryOrg}>
-                  {[e.company, e.location].filter(Boolean).join("  ·  ") || "Company"}
-                </Text>
                 {e.description.trim() ? <Text style={s.para}>{e.description}</Text> : null}
               </View>
             ))}
@@ -116,15 +118,17 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
         {f.education ? (
           <Section title="Education">
             {data.educations.map((ed) => (
-              <View key={ed.id} style={s.entry} wrap={false}>
-                <View style={s.rowBetween}>
-                  <Text style={s.entryTitle}>
-                    {ed.degree || "Degree"}
-                    {ed.field ? `, ${ed.field}` : ""}
-                  </Text>
-                  <Text style={s.dates}>{pdfDate(ed.startDate, ed.endDate)}</Text>
+              <View key={ed.id} style={s.entry} minPresenceAhead={ENTRY_KEEP}>
+                <View wrap={false}>
+                  <View style={s.rowBetween}>
+                    <Text style={s.entryTitle}>
+                      {ed.degree || "Degree"}
+                      {ed.field ? `, ${ed.field}` : ""}
+                    </Text>
+                    <Text style={s.dates}>{pdfDate(ed.startDate, ed.endDate)}</Text>
+                  </View>
+                  <Text style={s.entryOrg}>{ed.institution || "Institution"}</Text>
                 </View>
-                <Text style={s.entryOrg}>{ed.institution || "Institution"}</Text>
                 {ed.description.trim() ? <Text style={s.para}>{ed.description}</Text> : null}
               </View>
             ))}
@@ -152,8 +156,8 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
         {f.projects ? (
           <Section title="Projects">
             {data.projects.map((pr) => (
-              <View key={pr.id} style={s.entry} wrap={false}>
-                <View style={s.rowBetween}>
+              <View key={pr.id} style={s.entry} minPresenceAhead={ENTRY_KEEP}>
+                <View style={s.rowBetween} wrap={false}>
                   <Text style={s.entryTitle}>{pr.name || "Project"}</Text>
                   {pr.url.trim() ? (
                     <Text style={[s.dates, { color: GREEN_MID }]}>{pr.url}</Text>

@@ -35,6 +35,16 @@ export function contactList(p: PersonalInfo, order: (keyof PersonalInfo)[]): str
     .join("   •   ");
 }
 
+/**
+ * Minimum vertical space (in pt) that must remain on the current page before an
+ * entry (experience / education / project) is allowed to start. If less than
+ * this is left, react-pdf pushes the whole entry to the next page — which keeps
+ * the entry's heading with the first lines of its body instead of orphaning the
+ * heading at the very bottom of a page. Entries themselves stay wrappable so
+ * long descriptions flow across pages instead of being clipped.
+ */
+export const ENTRY_KEEP = 56;
+
 export const SKILL_PCT: Record<string, number> = {
   Beginner: 35,
   Intermediate: 60,

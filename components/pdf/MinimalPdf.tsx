@@ -1,6 +1,6 @@
 import { Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import type { CVData } from "@/lib/cv-types";
-import { pdfDate, contactList, PdfFlags } from "./pdf-utils";
+import { pdfDate, contactList, PdfFlags, ENTRY_KEEP } from "./pdf-utils";
 
 const s = StyleSheet.create({
   page: {
@@ -58,11 +58,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function TwoColRow({ date, children }: { date: string; children: React.ReactNode }) {
+/**
+ * A left date column + right content column. The row is wrappable so long
+ * descriptions flow onto the next page instead of being clipped; `header` holds
+ * the title/subtitle lines that must stay together, and `minPresenceAhead`
+ * keeps that header from being orphaned at the very bottom of a page.
+ */
+function TwoColRow({
+  date,
+  header,
+  children,
+}: {
+  date: string;
+  header: React.ReactNode;
+  children?: React.ReactNode;
+}) {
   return (
-    <View style={s.row} wrap={false}>
+    <View style={s.row} minPresenceAhead={ENTRY_KEEP}>
       <Text style={s.dateCol}>{date || "—"}</Text>
-      <View style={s.content}>{children}</View>
+      <View style={s.content}>
+        <View wrap={false}>{header}</View>
+        {children}
+      </View>
     </View>
   );
 }
@@ -96,11 +113,18 @@ export function MinimalPdf({ data, f }: { data: CVData; f: PdfFlags }) {
       {f.experience ? (
         <Section title="Experience">
           {data.experiences.map((e) => (
-            <TwoColRow key={e.id} date={pdfDate(e.startDate, e.endDate, e.current)}>
-              <Text style={s.entryTitle}>{e.position || "Position"}</Text>
-              <Text style={s.entrySub}>
-                {[e.company, e.location].filter(Boolean).join(", ") || "Company"}
-              </Text>
+            <TwoColRow
+              key={e.id}
+              date={pdfDate(e.startDate, e.endDate, e.current)}
+              header={
+                <>
+                  <Text style={s.entryTitle}>{e.position || "Position"}</Text>
+                  <Text style={s.entrySub}>
+                    {[e.company, e.location].filter(Boolean).join(", ") || "Company"}
+                  </Text>
+                </>
+              }
+            >
               {e.description.trim() ? <Text style={s.body}>{e.description}</Text> : null}
             </TwoColRow>
           ))}
@@ -110,12 +134,19 @@ export function MinimalPdf({ data, f }: { data: CVData; f: PdfFlags }) {
       {f.education ? (
         <Section title="Education">
           {data.educations.map((ed) => (
-            <TwoColRow key={ed.id} date={pdfDate(ed.startDate, ed.endDate)}>
-              <Text style={s.entryTitle}>
-                {ed.degree || "Degree"}
-                {ed.field ? `, ${ed.field}` : ""}
-              </Text>
-              <Text style={s.entrySub}>{ed.institution || "Institution"}</Text>
+            <TwoColRow
+              key={ed.id}
+              date={pdfDate(ed.startDate, ed.endDate)}
+              header={
+                <>
+                  <Text style={s.entryTitle}>
+                    {ed.degree || "Degree"}
+                    {ed.field ? `, ${ed.field}` : ""}
+                  </Text>
+                  <Text style={s.entrySub}>{ed.institution || "Institution"}</Text>
+                </>
+              }
+            >
               {ed.description.trim() ? <Text style={s.body}>{ed.description}</Text> : null}
             </TwoColRow>
           ))}
@@ -125,8 +156,11 @@ export function MinimalPdf({ data, f }: { data: CVData; f: PdfFlags }) {
       {f.projects ? (
         <Section title="Projects">
           {data.projects.map((pr) => (
-            <TwoColRow key={pr.id} date={pr.technologies[0] ?? "—"}>
-              <Text style={s.entryTitle}>{pr.name || "Project"}</Text>
+            <TwoColRow
+              key={pr.id}
+              date={pr.technologies[0] ?? "—"}
+              header={<Text style={s.entryTitle}>{pr.name || "Project"}</Text>}
+            >
               {pr.description.trim() ? <Text style={s.body}>{pr.description}</Text> : null}
               {pr.technologies.length ? (
                 <Text style={[s.entrySub, { marginTop: 3 }]}>

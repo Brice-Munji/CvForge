@@ -15,12 +15,20 @@ model Profile {
   name         String?
   avatarUrl    String?
   /// Only set when using the built-in local auth provider (scrypt hash).
-  /// Never set when authentication is delegated to Supabase.
+  /// Never set when authentication is delegated to Supabase (or Google sign-in).
   passwordHash String?
+  /// When the user confirmed ownership of their email address (null = not yet
+  /// verified). Password sign-ups start unverified and must confirm via an
+  /// emailed link before they can log in; Google/Supabase accounts are verified
+  /// by the provider on creation.
+  emailVerified DateTime?
+  /// "local" | "google" | "supabase" — how the account was created / signs in.
+  authProvider  String        @default("local")
   /// USER | ADMIN — authorization is always checked server-side against this.
   role         String        @default("USER")
   /// A disabled account keeps all its data but cannot use protected features.
   disabled     Boolean       @default(false)
+  verificationTokens VerificationToken[]
   cvs          CV[]
   coverLetters      CoverLetter[]
   applications      Application[]
@@ -38,6 +46,24 @@ model Profile {
   @@index([role])
   @@index([createdAt])
   @@index([disabled])
+}
+
+/// Single-use, expiring tokens for confirming email ownership (built-in local
+/// auth provider). Only the SHA-256 hash of the token is stored; the raw token
+/// travels in the emailed link. Consumed (deleted) on successful verification.
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// SHA-256 hex of the raw token (never store the raw token).
+  tokenHash String   @unique
+  /// EMAIL_VERIFY (room for PASSWORD_RESET etc. later).
+  type      String   @default("EMAIL_VERIFY")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /// Immutable trail of sensitive admin actions.

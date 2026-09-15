@@ -1,6 +1,7 @@
 import { Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import type { CVData } from "@/lib/cv-types";
 import { pdfDate, contactList, PdfFlags, SKILL_PCT, ENTRY_KEEP } from "./pdf-utils";
+import { Description } from "./Description";
 
 const GREEN = "#0A4531";
 const GREEN_MID = "#0E6B49";
@@ -92,7 +93,7 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
       <View style={s.body}>
         {f.summary ? (
           <Section title="Summary">
-            <Text style={s.summary}>{data.summary}</Text>
+            <Description text={data.summary} style={s.summary} />
           </Section>
         ) : null}
 
@@ -109,7 +110,7 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
                     {[e.company, e.location].filter(Boolean).join("  ·  ") || "Company"}
                   </Text>
                 </View>
-                {e.description.trim() ? <Text style={s.para}>{e.description}</Text> : null}
+                {e.description.trim() ? <Description text={e.description} style={s.para} /> : null}
               </View>
             ))}
           </Section>
@@ -129,7 +130,7 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
                   </View>
                   <Text style={s.entryOrg}>{ed.institution || "Institution"}</Text>
                 </View>
-                {ed.description.trim() ? <Text style={s.para}>{ed.description}</Text> : null}
+                {ed.description.trim() ? <Description text={ed.description} style={s.para} /> : null}
               </View>
             ))}
           </Section>
@@ -163,7 +164,7 @@ export function ModernPdf({ data, f }: { data: CVData; f: PdfFlags }) {
                     <Text style={[s.dates, { color: GREEN_MID }]}>{pr.url}</Text>
                   ) : null}
                 </View>
-                {pr.description.trim() ? <Text style={s.para}>{pr.description}</Text> : null}
+                {pr.description.trim() ? <Description text={pr.description} style={s.para} /> : null}
                 {pr.technologies.length ? (
                   <Text style={[s.entryOrg, { marginTop: 2 }]}>
                     {pr.technologies.join(" · ")}

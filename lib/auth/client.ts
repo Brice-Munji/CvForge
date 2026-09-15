@@ -9,7 +9,12 @@ export function isSupabaseConfigured(): boolean {
   );
 }
 
-type Result = { error?: string };
+/** The Google OAuth client id for the built-in (local) Google sign-in flow. */
+export function googleClientId(): string {
+  return process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+}
+
+export type Result = { error?: string; data?: Record<string, unknown> };
 
 async function apiJson(path: string, body: unknown): Promise<Result> {
   try {
@@ -18,11 +23,11 @@ async function apiJson(path: string, body: unknown): Promise<Result> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { error: data.error || "Something went wrong. Please try again." };
+      return { error: data.error || "Something went wrong. Please try again.", data };
     }
-    return {};
+    return { data };
   } catch {
     return { error: "Network error. Please check your connection." };
   }
@@ -42,8 +47,8 @@ export async function signUpWithPassword(
       options: { data: { full_name: name } },
     });
     if (error) return { error: error.message };
-    // With email confirmation disabled the session is active immediately.
-    return {};
+    // Supabase sends its own confirmation email; surface the same state.
+    return { data: { needsVerification: true, email } };
   }
   return apiJson("/api/auth/signup", { name, email, password });
 }
@@ -65,11 +70,27 @@ export async function signInWithPassword(
   return apiJson("/api/auth/login", { email, password });
 }
 
+/** Resend the email-verification link (local provider). */
+export async function resendVerification(email: string): Promise<Result> {
+  if (isSupabaseConfigured()) {
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) return { error: "Authentication is not configured." };
+    const { error } = await supabase.auth.resend({ type: "signup", email });
+    if (error) return { error: error.message };
+    return {};
+  }
+  return apiJson("/api/auth/resend-verification", { email });
+}
+
+/**
+ * Supabase Google OAuth (redirect flow). Used only when Supabase is configured;
+ * the local provider uses Google Identity Services + `signInWithGoogleCredential`.
+ */
 export async function signInWithGoogle(): Promise<Result> {
   if (!isSupabaseConfigured()) {
     return {
       error:
-        "Google sign-in requires Supabase. Add your Supabase keys to enable it, or continue with email.",
+        "Google sign-in is not configured. Set NEXT_PUBLIC_GOOGLE_CLIENT_ID, or continue with email.",
     };
   }
   const supabase = createSupabaseBrowserClient();
@@ -80,6 +101,11 @@ export async function signInWithGoogle(): Promise<Result> {
   });
   if (error) return { error: error.message };
   return {};
+}
+
+/** Local provider: exchange a Google Identity Services ID token for a session. */
+export async function signInWithGoogleCredential(credential: string): Promise<Result> {
+  return apiJson("/api/auth/google", { credential });
 }
 
 export async function logout(): Promise<void> {

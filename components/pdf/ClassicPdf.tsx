@@ -1,6 +1,7 @@
 import { Page, View, Text, StyleSheet } from "@react-pdf/renderer";
 import type { CVData } from "@/lib/cv-types";
 import { pdfDate, contactList, PdfFlags, ENTRY_KEEP } from "./pdf-utils";
+import { Description } from "./Description";
 
 const s = StyleSheet.create({
   page: {
@@ -73,7 +74,7 @@ export function ClassicPdf({ data, f }: { data: CVData; f: PdfFlags }) {
 
       {f.summary ? (
         <Section title="Profile">
-          <Text style={s.body}>{data.summary}</Text>
+          <Description text={data.summary} style={s.body} />
         </Section>
       ) : null}
 
@@ -90,7 +91,7 @@ export function ClassicPdf({ data, f }: { data: CVData; f: PdfFlags }) {
                   {[e.company, e.location].filter(Boolean).join(", ") || "Company"}
                 </Text>
               </View>
-              {e.description.trim() ? <Text style={s.body}>{e.description}</Text> : null}
+              {e.description.trim() ? <Description text={e.description} style={s.body} /> : null}
             </View>
           ))}
         </Section>
@@ -110,7 +111,7 @@ export function ClassicPdf({ data, f }: { data: CVData; f: PdfFlags }) {
                 </View>
                 <Text style={s.entrySub}>{ed.institution || "Institution"}</Text>
               </View>
-              {ed.description.trim() ? <Text style={s.body}>{ed.description}</Text> : null}
+              {ed.description.trim() ? <Description text={ed.description} style={s.body} /> : null}
             </View>
           ))}
         </Section>
@@ -124,7 +125,7 @@ export function ClassicPdf({ data, f }: { data: CVData; f: PdfFlags }) {
                 <Text style={s.entryTitle}>{pr.name || "Project"}</Text>
                 {pr.url.trim() ? <Text style={s.dates}>{pr.url}</Text> : null}
               </View>
-              {pr.description.trim() ? <Text style={s.body}>{pr.description}</Text> : null}
+              {pr.description.trim() ? <Description text={pr.description} style={s.body} /> : null}
               {pr.technologies.length ? (
                 <Text style={s.entrySub}>{pr.technologies.join(", ")}</Text>
               ) : null}

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { setLocalSession } from "@/lib/auth/server";
 import { supabaseEnabled } from "@/lib/auth/config";
-import { isValidEmail } from "@/lib/validation";
+import { isValidEmail, normalizeEmail, EMAIL_INVALID_MESSAGE } from "@/lib/validation";
 import { jsonError } from "@/lib/server/api";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +16,13 @@ export async function POST(req: Request) {
     const { email, password } = await req.json();
 
     if (!email || !isValidEmail(String(email))) {
-      return jsonError("Please enter a valid email address.", 400);
+      return jsonError(EMAIL_INVALID_MESSAGE, 400);
     }
     if (!password) {
       return jsonError("Please enter your password.", 400);
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(String(email));
     const profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
     });
@@ -34,6 +34,19 @@ export async function POST(req: Request) {
     const ok = await verifyPassword(String(password), profile.passwordHash);
     if (!ok) {
       return jsonError("Incorrect email or password.", 401);
+    }
+
+    // Block sign-in until the email address has been confirmed.
+    if (!profile.emailVerified) {
+      return NextResponse.json(
+        {
+          error:
+            "Please verify your email address first. Check your inbox for the verification link.",
+          needsVerification: true,
+          email: normalizedEmail,
+        },
+        { status: 403 }
+      );
     }
 
     await setLocalSession(profile.id);

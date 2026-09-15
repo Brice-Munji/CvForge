@@ -2,22 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, MailCheck } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import { Button } from "@/components/ui/Button";
 import { Input, FieldGroup } from "@/components/ui/Field";
-import { signUpWithPassword } from "@/lib/auth/client";
-import { isValidEmail } from "@/lib/validation";
+import { signUpWithPassword, resendVerification } from "@/lib/auth/client";
+import { isValidEmail, EMAIL_INVALID_MESSAGE } from "@/lib/validation";
 
 export default function SignupPage() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set once the account is created and a verification email has been sent.
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,12 +26,12 @@ export default function SignupPage() {
     setError(null);
 
     if (!name.trim()) return setError("Please enter your full name.");
-    if (!isValidEmail(email)) return setError("Please enter a valid email address.");
+    if (!isValidEmail(email)) return setError(EMAIL_INVALID_MESSAGE);
     if (password.length < 6)
       return setError("Password must be at least 6 characters.");
 
     setLoading(true);
-    const { error } = await signUpWithPassword(
+    const { error, data } = await signUpWithPassword(
       name.trim(),
       email.trim(),
       password
@@ -40,9 +41,54 @@ export default function SignupPage() {
       setLoading(false);
       return;
     }
-    router.push("/dashboard");
-    router.refresh();
+    // Account created — wait for email confirmation before any session exists.
+    setSentTo((data?.email as string) || email.trim());
+    setLoading(false);
   };
+
+  const onResend = async () => {
+    if (!sentTo) return;
+    setResent(false);
+    await resendVerification(sentTo);
+    setResent(true);
+  };
+
+  if (sentTo) {
+    return (
+      <AuthShell eyebrow="Almost there">
+        <div className="mt-3 flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-brand-600">
+            <MailCheck className="h-5 w-5" />
+          </span>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight text-ink">
+            Verify your email
+          </h1>
+        </div>
+        <p className="mt-4 text-ink-muted">
+          We&apos;ve sent a verification link to{" "}
+          <span className="font-semibold text-ink">{sentTo}</span>. Click the link
+          in that email to activate your account, then log in.
+        </p>
+
+        {resent && (
+          <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-700">
+            Verification email sent again. Please check your inbox.
+          </div>
+        )}
+
+        <div className="mt-8 space-y-3">
+          <Button size="lg" className="w-full" onClick={onResend}>
+            Resend verification email
+          </Button>
+          <Link href="/login" className="block">
+            <Button variant="secondary" size="lg" className="w-full">
+              Go to log in
+            </Button>
+          </Link>
+        </div>
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell eyebrow="Get started free">

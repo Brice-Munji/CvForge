@@ -1,9 +1,19 @@
-import { Document } from "@react-pdf/renderer";
+import { Document, Font } from "@react-pdf/renderer";
 import type { CVData } from "@/lib/cv-types";
 import { pdfFlags } from "./pdf-utils";
 import { ClassicPdf } from "./ClassicPdf";
 import { ModernPdf } from "./ModernPdf";
 import { MinimalPdf } from "./MinimalPdf";
+
+/**
+ * Disable automatic hyphenation for the whole document. By default react-pdf
+ * breaks long words with a hyphen at line ends; if such a break falls on a page
+ * boundary a single word is divided across two pages, which looks broken and
+ * violates the "never split a line of text between pages" requirement. Returning
+ * the word unchanged keeps every word whole — line wrapping still happens, but
+ * only at natural whitespace boundaries, never mid-word.
+ */
+Font.registerHyphenationCallback((word) => [word]);
 
 /**
  * The single source that turns template-independent CV data into a PDF
